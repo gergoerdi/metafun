@@ -13,7 +13,7 @@ import Control.Monad
 import Data.Char
     
 lexer = T.makeTokenParser $ L.haskellStyle {
-          T.reservedNames = ["if", "then", "else", "True", "False"],
+          T.reservedNames = ["if", "then", "else", "True", "False", "let", "in"],
           T.reservedOpNames = ["::", "->", "=", "\\", "*", "/", "+", "-", "%", "&&", "||", "==", "<", ">", "<=", ">="]
          }
     
@@ -64,6 +64,7 @@ expr = buildExpressionParser table term <?> "expression"
                    [Infix (reservedOp ":" >> return listcons) AssocRight],
                    [binary "*" OpMul, binary "/" OpDiv],
                    [binary "+" OpAdd, binary "-" OpSub],
+                   [binary "%" OpMod],
                    [binary "==" OpEq, binary "<=" OpLe, binary "<" OpLt, binary ">" OpGt, binary ">=" OpGe],
                    [binary "||" OpOr],
                    [binary "&&" OpAnd]]
@@ -71,8 +72,19 @@ expr = buildExpressionParser table term <?> "expression"
               where binary op cb = Infix (reservedOp op >> return (PrimBinOp cb)) AssocLeft
                     listcons left right = App (App (Con "cons") left) right
                   
-          term = parens expr <|> list <|> intLit <|> boolLit <|> varref <|> con <|> lam
+          term = parens expr <|> list <|> intLit <|> boolLit <|> varref <|> con <|> lam <|> vars
 
+          vars = do reserved "let"
+                    defs <- IP.block $ many1 $ IP.lineFold $ do
+                             name <- identifier
+                             reservedOp "="
+                             value <- expr
+                             return (name, value)
+                    reserved "in"
+                    body <- expr
+                    return $ Let defs body
+                    
+                 
           list = do elems <- brackets $ expr `sepBy` comma
                     return $ foldr (\x xs -> App (App (Con "cons") x) xs) (Con "nil") elems
                  
@@ -144,7 +156,9 @@ def = do
                          return $ (v, t)
 
           defEqs v = many1 $ IP.lineFold $ defEq v
-                    
+
+program = many (whiteSpace >> def)                     
+                     
 run p input = IP.parse (IP.block p) "" input
                                  
 test = unlines ["value :: [Int] -> Int",
@@ -153,6 +167,3 @@ test = unlines ["value :: [Int] -> Int",
                 "",
                 "contains elem [] = False",
                 "contains elem (first:rest) = elem == first || (contains elem rest)"]
-                                 
-test' = unlines ["1 + ",
-                 "2"]

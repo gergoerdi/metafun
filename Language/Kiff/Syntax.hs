@@ -2,17 +2,19 @@ module Language.Kiff.Syntax where
 
 type DataName = String
 type TvName = String
+type TvInternal = Int
     
 data TyPrimitive  = TyInt
                   | TyBool
-                    deriving Show
+                  deriving (Eq, Show)
 
 data Ty  = TyVar TvName
+         | TyUnique TvInternal
          | TyFun Ty Ty
          | TyApp Ty Ty
          | TyData DataName
          | TyPrimitive TyPrimitive
-           deriving Show
+         deriving Show
 
 
 type VarName = String
@@ -30,12 +32,13 @@ data PrimitiveOp  = OpAdd
                   | OpLt
                   | OpGe
                   | OpGt
-                    deriving Show
+                  deriving Show
     
 data Expr  = Var VarName
            | Con ConName
            | App Expr Expr
            | Lam [Pat] Expr
+           | Let [(VarName, Expr)] Expr
            | PrimBinOp PrimitiveOp Expr Expr
            | IfThenElse Expr Expr Expr
            | IntLit Int
