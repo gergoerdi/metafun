@@ -1,27 +1,10 @@
 module Language.Kiff.Typing.Unify where
 
 import Language.Kiff.Syntax
-import qualified Data.Map as Map
-import Debug.Trace
+import Language.Kiff.Typing.Substitution
     
 data TyEq = Ty :=: Ty deriving Show
-newtype Subst = Subst (Map.Map TvInternal Ty) deriving Show
-
-empty = Subst (Map.empty)
-
-add :: Subst -> TvInternal -> Ty -> Subst
-add (Subst m) x t = Subst $ Map.insert x t m
-
-xform :: Subst -> Ty -> Ty
-xform s t@(TyData _)       = t
-xform s t@(TyPrimitive _)  = t
-xform s (TyFun t u)        = TyFun (xform s t) (xform s u)
-xform s (TyApp t u)        = TyApp (xform s t) (xform s u)
-xform s (TyUnique x)       = case Map.lookup x m of
-                               Nothing -> TyUnique x
-                               Just t  -> xform s t
-    where Subst m = s
-                    
+          
 data UnificationError  = InfiniteType Ty Ty
                        | Unsolvable Ty Ty
                        deriving Show
@@ -32,7 +15,6 @@ data Unification  = Skip
                   | OccursFailed
                   | Substitute TvInternal Ty
                   | Recurse [TyEq]
-                  deriving Show
 
 occurs :: TvInternal -> Ty -> Bool
 occurs x (TyUnique y)  = x == y
@@ -67,9 +49,3 @@ unify leftOnly  ((t :=: t'):eqs)  = process $ unifyEq t t'
           addError e = case unify leftOnly eqs of
                          Left es -> Left $ e:es
                          Right _ -> Left $ [e]
-                                    
-
-testeqs = [TyFun (TyPrimitive TyInt) (TyPrimitive TyInt) :=: TyFun (TyPrimitive TyInt) (TyPrimitive TyBool)]
-testeqs' = [TyApp (TyData "List") (TyUnique 1) :=: TyUnique 1]
-testeqs'' = [TyApp (TyData "List") (TyUnique 1) :=: TyUnique 2,
-            TyUnique 2 :=: TyApp (TyData "List") (TyPrimitive TyInt)]
