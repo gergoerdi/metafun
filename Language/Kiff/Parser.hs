@@ -64,6 +64,7 @@ expr = buildExpressionParser table term <?> "expression"
                    [Infix (reservedOp ":" >> return listcons) AssocRight],
                    [binary "*" OpMul, binary "/" OpDiv],
                    [binary "+" OpAdd, binary "-" OpSub],
+                   [binary "==" OpEq, binary "<=" OpLe, binary "<" OpLt, binary ">" OpGt, binary ">=" OpGe],
                    [binary "||" OpOr],
                    [binary "&&" OpAnd]]
                   -- TODO: ==, <=, ..
@@ -129,7 +130,7 @@ defEq varname = do symbol varname
                    return $ DefEq pats body
 
 def = do
-        msig <- optionMaybe $ IP.lineFold signature
+        msig <- optionMaybe $ try $ IP.lineFold signature
         case msig of
           Just (v, sig)  -> do  eqs <- defEqs v
                                 return $ Def v (Just sig) eqs
@@ -143,7 +144,7 @@ def = do
                          return $ (v, t)
 
           defEqs v = many1 $ IP.lineFold $ defEq v
-                                   
+                    
 run p input = IP.parse (IP.block p) "" input
     where parseWhole = do whiteSpace
                           x <- p
@@ -152,7 +153,10 @@ run p input = IP.parse (IP.block p) "" input
                                  
 test = unlines ["value :: [Int] -> Int",
                 "value [] = 0",
-                "value (first:rest) = 10 * (value rest) + first"]
+                "value (first:rest) = 10 * (value rest) + first",
+                "",
+                "contains elem [] = False",
+                "contains elem (first:rest) = elem == first || (contains elem rest)"]
                                  
 test' = unlines ["1 + ",
                  "2"]
