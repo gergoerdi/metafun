@@ -38,10 +38,28 @@ blocks = do r <- many block
             return r
 
 runLineParser = runParser blocks 0                   
-                   
-run :: String -> Either ParseError [NestedLine]
-run input = runLineParser "" input
-                  
+
+-- run :: String -> Either ParseError [Token]
+run input = case runLineParser "" input of
+              Left error        -> Left error
+              Right nestedline  -> Right nestedLine
+
+type Token = (SourcePos, Tok)
+data Tok  = StartBlock
+          | Lit Char
+          | EndBlock
+          deriving Show
+
+parseTok :: GenParser Char st a -> GenParser Token st a
+parseTok p = token showToken posToken testToken
+    where showToken  (pos, tok)         = show tok
+          posToken   (pos, tok)         = pos
+          testToken  (pos, StartBlock)  = foo "{"
+          testToken  (pos, EndBlock)    = foo "}"
+          testToken  (pos, Lit ch)      = foo ch
+
+          foo ch = 
+                                   
 test = unlines ["foo",
                 "  foo1",
                 "  foo2",
@@ -53,3 +71,4 @@ test' = unlines ["foo",
                  " bar",
                  "  baz",
                  " quux"]
+        
