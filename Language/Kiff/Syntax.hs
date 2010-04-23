@@ -25,7 +25,6 @@ data PrimitiveOp  = OpAdd
                   | OpMod
                   | OpOr
                   | OpAnd
-                  | OpNot
                   | OpEq
                   | OpLe
                   | OpLt
@@ -37,7 +36,7 @@ data Expr  = Var VarName
            | Con ConName
            | App Expr Expr
            | Lam [Pat] Expr
-           | PrimOp PrimitiveOp
+           | PrimBinOp PrimitiveOp Expr Expr
            | IntLit Int
            | BoolLit Bool
              deriving Show
@@ -47,3 +46,4 @@ data Pat  = PVar VarName
           | IntPat Int
           | BoolPat Bool
             deriving Show
+                     
