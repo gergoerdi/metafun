@@ -40,6 +40,7 @@ data Expr  = Var VarName
            | IfThenElse Expr Expr Expr
            | IntLit Int
            | BoolLit Bool
+           | UnaryMinus Expr
              deriving Show
 
 data Pat  = PVar VarName

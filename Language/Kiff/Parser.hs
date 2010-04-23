@@ -5,15 +5,14 @@ import Language.Kiff.Syntax
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import qualified Text.ParserCombinators.Parsec.Token as T
-import Text.ParserCombinators.Parsec.Language (haskellStyle)
+import qualified Text.ParserCombinators.Parsec.Language as L
 import qualified Text.ParserCombinators.Parsec.IndentParser.Token as IT
 import qualified Text.ParserCombinators.Parsec.IndentParser as IP
 
 import Control.Monad
 import Data.Char
     
-lexer = T.makeTokenParser $ haskellStyle {
-          T.caseSensitive = True,
+lexer = T.makeTokenParser $ L.haskellStyle {
           T.reservedNames = ["if", "then", "else", "True", "False"],
           T.reservedOpNames = ["::", "->", "=", "\\", "*", "/", "+", "-", "%", "&&", "||", "==", "<", ">", "<=", ">="]
          }
@@ -60,7 +59,8 @@ ty = do tys <- ty' `sepBy1` (reservedOp "->")
                                    (reserved "Bool" >> return (TyPrimitive TyBool))
                                    
 expr = buildExpressionParser table term <?> "expression"
-    where table = [[Infix (whiteSpace >> return App) AssocLeft],
+    where table = [[Prefix (reservedOp "-" >> return UnaryMinus)],
+                   [Infix (whiteSpace >> return App) AssocLeft],
                    [Infix (reservedOp ":" >> return listcons) AssocRight],
                    [binary "*" OpMul, binary "/" OpDiv],
                    [binary "+" OpAdd, binary "-" OpSub],
@@ -123,7 +123,7 @@ pat = buildExpressionParser table term <?> "pattern"
                     return $ foldr listcons (PApp "Nil" []) pats
                     
 
-defEq varname = do symbol varname
+defEq varname = do try $ symbol varname
                    pats <- many pat
                    reservedOp "="
                    body <- expr
@@ -146,10 +146,6 @@ def = do
           defEqs v = many1 $ IP.lineFold $ defEq v
                     
 run p input = IP.parse (IP.block p) "" input
-    where parseWhole = do whiteSpace
-                          x <- p
-                          eof
-                          return x
                                  
 test = unlines ["value :: [Int] -> Int",
                 "value [] = 0",
