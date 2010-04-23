@@ -37,6 +37,7 @@ data Expr  = Var VarName
            | App Expr Expr
            | Lam [Pat] Expr
            | PrimBinOp PrimitiveOp Expr Expr
+           | IfThenElse Expr Expr Expr
            | IntLit Int
            | BoolLit Bool
              deriving Show
@@ -47,3 +48,5 @@ data Pat  = PVar VarName
           | BoolPat Bool
             deriving Show
                      
+data DefEq = DefEq [Pat] Expr deriving Show
+data Def = Def VarName (Maybe Ty) [DefEq] deriving Show
