@@ -14,7 +14,10 @@ import Data.Char
     
 lexer = T.makeTokenParser $ L.haskellStyle {
           T.reservedNames = ["if", "then", "else", "True", "False", "let", "in"],
-          T.reservedOpNames = ["::", "->", "=", "\\", "*", "/", "+", "-", "%", "&&", "||", "==", "<", ">", "<=", ">="]
+          T.reservedOpNames = ["::", "->", "=", "\\", "_",
+                               "*", "/", "+", "-", "%",
+                               "&&", "||",
+                               "==", "<", ">", "<=", ">="]
          }
     
 brackets   = IT.brackets lexer
@@ -47,7 +50,7 @@ ty = do tys <- ty' `sepBy1` (reservedOp "->")
 
                      listTy = do tyElem <- brackets ty
                                  -- TODO
-                                 return $ TyApp (TyData "List") tyElem
+                                 return $ TyApp (TyData "list") tyElem
 
                      tyVar = do tv <- varname
                                 return $ TyVar tv
@@ -115,7 +118,7 @@ expr = buildExpressionParser table term <?> "expression"
 
 pat = buildExpressionParser table term <?> "pattern"
     where table = [[Infix (reservedOp ":" >> return listcons) AssocRight]]
-          term = try (parens conpat) <|> list<|> varpat <|> intpat <|> boolpat <|> parens pat
+          term = try (parens conpat) <|> list <|> wildcard <|> varpat <|> intpat <|> boolpat <|> parens pat
 
           conpat = do con <- conname
                       pats <- many pat
@@ -124,15 +127,18 @@ pat = buildExpressionParser table term <?> "pattern"
           varpat = do v <- varname
                       return $ PVar v
 
+          wildcard = do reservedOp "_"
+                        return $ Wildcard
+                             
           intpat = do i <- integer
                       return $ IntPat $ fromInteger i
 
           boolpat = liftM BoolPat boollit
 
-          listcons head rest = PApp "Cons" [head, rest]
+          listcons head rest = PApp "cons" [head, rest]
                                
           list = do pats <- brackets $ pat `sepBy` comma
-                    return $ foldr listcons (PApp "Nil" []) pats
+                    return $ foldr listcons (PApp "nil" []) pats
                     
 
 defEq varname = do try $ symbol varname
@@ -157,13 +163,6 @@ def = do
 
           defEqs v = many1 $ IP.lineFold $ defEq v
 
-program = many (whiteSpace >> def)                     
+program = many (whiteSpace >> def)
                      
 run p input = IP.parse (IP.block p) "" input
-                                 
-test = unlines ["value :: [Int] -> Int",
-                "value [] = 0",
-                "value (first:rest) = 10 * (value rest) + first",
-                "",
-                "contains elem [] = False",
-                "contains elem (first:rest) = elem == first || (contains elem rest)"]

@@ -2,14 +2,14 @@ module Language.Kiff.Syntax where
 
 type DataName = String
 type TvName = String
-type TvInternal = Int
+type TvId = Int
     
 data TyPrimitive  = TyInt
                   | TyBool
                   deriving (Eq, Show)
 
 data Ty  = TyVar TvName
-         | TyUnique TvInternal
+         | TyVarId TvId
          | TyFun Ty Ty
          | TyApp Ty Ty
          | TyData DataName
@@ -48,6 +48,7 @@ data Expr  = Var VarName
 
 data Pat  = PVar VarName
           | PApp ConName [Pat]
+          | Wildcard
           | IntPat Int
           | BoolPat Bool
             deriving Show

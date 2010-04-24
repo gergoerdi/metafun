@@ -13,24 +13,25 @@ data Unification  = Skip
                   | Incongruent
                   | Flip Unification
                   | OccursFailed
-                  | Substitute TvInternal Ty
+                  | Substitute TvId Ty
                   | Recurse [TyEq]
 
-occurs :: TvInternal -> Ty -> Bool
-occurs x (TyUnique y)  = x == y
-occurs x (TyFun t u)   = occurs x t || occurs x u
-occurs x (TyApp t u)   = occurs x t || occurs x u
-occurs x _             = False                         
+occurs :: TvId -> Ty -> Bool
+occurs x (TyVarId y)  = x == y
+occurs x (TyFun t u)  = occurs x t || occurs x u
+occurs x (TyApp t u)  = occurs x t || occurs x u
+occurs x _            = False                         
                     
 unifyEq :: Ty -> Ty -> Unification
-unifyEq (TyPrimitive p)  (TyPrimitive p')  = if p == p' then Skip else Incongruent
-unifyEq (TyData d)       (TyData d')       = if d == d' then Skip else Incongruent
-unifyEq (TyUnique x)     (TyUnique y)      = Skip
-unifyEq (TyUnique x)     t'                = if occurs x t' then OccursFailed else Substitute x t'
-unifyEq t                (TyUnique y)      = Flip Incongruent
-unifyEq (TyFun t u)      (TyFun t' u')     = Recurse [t :=: t', u :=: u']
-unifyEq (TyApp t u)      (TyApp t' u')     = Recurse [t :=: t', u :=: u']
-unifyEq _                _                 = Incongruent
+unifyEq (TyPrimitive p)  (TyPrimitive p')               = if p == p' then Skip else Incongruent
+unifyEq (TyData d)       (TyData d')                    = if d == d' then Skip else Incongruent
+unifyEq (TyVarId x)      (TyVarId y)      | x == y      = Skip
+unifyEq (TyVarId x)      t'               | occurs x t' = OccursFailed
+                                          | otherwise   = Substitute x t'
+unifyEq t                (TyVarId y)                    = Flip Incongruent
+unifyEq (TyFun t u)      (TyFun t' u')                  = Recurse [t :=: t', u :=: u']
+unifyEq (TyApp t u)      (TyApp t' u')                  = Recurse [t :=: t', u :=: u']
+unifyEq _                _                              = Incongruent
 
 unify :: Bool -> [TyEq] -> Either [UnificationError] Subst
 unify _         []                = Right $ empty
