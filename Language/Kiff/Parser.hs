@@ -1,4 +1,4 @@
-module Language.Kiff.Parser where
+module Language.Kiff.Parser (parseFile) where
 
 import Language.Kiff.Syntax    
     
@@ -11,10 +11,13 @@ import qualified Text.ParserCombinators.Parsec.IndentParser as IP
 
 import Control.Monad
 import Data.Char
+import Data.Either
+
+import Debug.Trace    
     
 lexer = T.makeTokenParser $ L.haskellStyle {
-          T.reservedNames = ["if", "then", "else", "True", "False", "let", "in"],
-          T.reservedOpNames = ["::", "->", "=", "\\", "_",
+          T.reservedNames = ["if", "then", "else", "True", "False", "let", "in", "data", "type"],
+          T.reservedOpNames = ["::", "->", "=", "\\", "_", "|",
                                "*", "/", "+", "-", "%",
                                "&&", "||",
                                "==", "<", ">", "<=", ">="]
@@ -46,7 +49,7 @@ ty = do tys <- ty' `sepBy1` (reservedOp "->")
         return $ foldl1 TyFun tys 
     where ty' = buildExpressionParser table term <?> "type expression"
               where  table = [[Infix (whiteSpace >> return TyApp) AssocRight]]
-                     term =  parens ty <|> listTy <|> primitiveTy <|> tyVar <|> dataTy
+                     term =  parens ty <|> listTy <|> try primitiveTy <|> try tyVar <|> dataTy
 
                      listTy = do tyElem <- brackets ty
                                  -- TODO
@@ -78,11 +81,7 @@ expr = buildExpressionParser table term <?> "expression"
           term = parens expr <|> list <|> intLit <|> boolLit <|> varref <|> con <|> lam <|> vars
 
           vars = do reserved "let"
-                    defs <- IP.block $ many1 $ IP.lineFold $ do
-                             name <- identifier
-                             reservedOp "="
-                             value <- expr
-                             return (name, value)
+                    defs <- IP.block $ many1 $ def
                     reserved "in"
                     body <- expr
                     return $ Let defs body
@@ -161,8 +160,37 @@ def = do
                          t <- ty
                          return $ (v, t)
 
-          defEqs v = many1 $ IP.lineFold $ defEq v
+          defEqs v = many1 $ IP.lineFold $ defEq v                     
 
-program = many (whiteSpace >> def)
-                     
-run p input = IP.parse (IP.block p) "" input
+typedecl = datadecl <|> typealias <?> "Type declaration"
+    where datadecl = do reserved "data"
+                        n <- conname
+                        tvs <- many varname
+                        reservedOp "="
+                        cons <- IP.lineFold $ datacon `sepBy` (reservedOp "|")
+                        return $ DataDecl n tvs cons
+                               
+          typealias = do reserved "type"
+                         n <- conname
+                         tvs <- many varname
+                         reservedOp "="
+                         ty <- IP.lineFold $ ty
+                         return $ TypeAlias n tvs ty
+                                
+          datacon = do n <- conname
+                       tys <- many ty
+                       return $ DataCon n tys
+
+program = do (decls, defs) <- liftM partitionEithers $ many $ whiteSpace >> (decl <|> vardef)
+             return $ Program decls defs
+                  
+    where decl = do td <- typedecl
+                    return $ Left td
+                           
+          vardef = do d <- def
+                      return $ Right d
+
+parseFile = IP.parseFromFile parseWhole
+    where parseWhole = do prog <- program
+                          eof
+                          return prog

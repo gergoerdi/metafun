@@ -19,6 +19,11 @@ data Ty  = TyVar TvName
 
 type VarName = String
 type ConName = String
+
+data TypeDecl = DataDecl DataName [TvName] [DataCon]
+              | TypeAlias DataName [TvName] Ty
+              deriving Show
+data DataCon = DataCon ConName [Ty] deriving Show
     
 data PrimitiveOp  = OpAdd
                   | OpSub
@@ -38,7 +43,7 @@ data Expr  = Var VarName
            | Con ConName
            | App Expr Expr
            | Lam [Pat] Expr
-           | Let [(VarName, Expr)] Expr
+           | Let [Def] Expr
            | PrimBinOp PrimitiveOp Expr Expr
            | IfThenElse Expr Expr Expr
            | IntLit Int
@@ -55,3 +60,5 @@ data Pat  = PVar VarName
                      
 data DefEq = DefEq [Pat] Expr deriving Show
 data Def = Def VarName (Maybe Ty) [DefEq] deriving Show
+
+data Program = Program [TypeDecl] [Def] deriving Show

@@ -1,4 +1,4 @@
-module Language.Kiff.Typing.Unify where
+module Language.Kiff.Typing.Unify (TyEq(..), unify, checkDecl) where
 
 import Language.Kiff.Syntax
 import Language.Kiff.Typing.Substitution
@@ -33,20 +33,23 @@ unifyEq (TyFun t u)      (TyFun t' u')                  = Recurse [t :=: t', u :
 unifyEq (TyApp t u)      (TyApp t' u')                  = Recurse [t :=: t', u :=: u']
 unifyEq _                _                              = Incongruent
 
-unify :: Bool -> [TyEq] -> Either [UnificationError] Subst
-unify _         []                = Right $ empty
-unify leftOnly  ((t :=: t'):eqs)  = process $ unifyEq t t'
-    where process Skip              = unify leftOnly eqs
-          process (Recurse eqs')    = unify leftOnly (eqs' ++ eqs)
+unify' :: Bool -> [TyEq] -> Either [UnificationError] Subst
+unify' _         []                = Right $ empty
+unify' leftOnly  ((t :=: t'):eqs)  = process $ unifyEq t t'
+    where process Skip              = unify' leftOnly eqs
+          process (Recurse eqs')    = unify' leftOnly (eqs' ++ eqs)
           process Incongruent       = addError $ Unsolvable t t'
           process (Flip u)          = process $ if leftOnly then u else unifyEq t' t
           process OccursFailed      = addError $ InfiniteType t t'
-          process (Substitute x t)  = case unify leftOnly eqs' of
+          process (Substitute x t)  = case unify' leftOnly eqs' of
                                         Left es -> Left es
                                         Right s -> Right $ add s x t
               where eqs' = map (\ (t :=: t') -> (xform s t) :=: (xform s t')) eqs
                     s = add empty x t
 
-          addError e = case unify leftOnly eqs of
+          addError e = case unify' leftOnly eqs of
                          Left es -> Left $ e:es
                          Right _ -> Left $ [e]
+
+unify = unify' False
+checkDecl = unify' True
