@@ -1,4 +1,4 @@
-module Language.Kiff.Typing.Unify (TyEq(..), unify, checkDecl) where
+module Language.Kiff.Typing.Unify (UnificationError(..), TyEq(..), unify, checkDecl) where
 
 import Language.Kiff.Syntax
 import Language.Kiff.Typing.Substitution
@@ -7,6 +7,7 @@ data TyEq = Ty :=: Ty deriving Show
           
 data UnificationError  = InfiniteType Ty Ty
                        | Unsolvable Ty Ty
+                       | CantFitDecl Ty Ty
                        deriving Show
 
 data Unification  = Skip
@@ -52,4 +53,4 @@ unify' leftOnly  ((t :=: t'):eqs)  = process $ unifyEq t t'
                          Right _ -> Left $ [e]
 
 unify = unify' False
-checkDecl = unify' True
+checkDecl tyDecl ty = unify' True [ty :=: tyDecl]
