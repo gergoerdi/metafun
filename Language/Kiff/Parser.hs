@@ -46,7 +46,7 @@ boollit = (reserved "True" >> return True) <|>
           (reserved "False" >> return False)
                 
 ty = do tys <- ty' `sepBy1` (reservedOp "->")
-        return $ foldl1 TyFun tys 
+        return $ foldr1 TyFun tys 
     where ty' = buildExpressionParser table term <?> "type expression"
               where  table = [[Infix (whiteSpace >> return TyApp) AssocRight]]
                      term =  parens ty <|> listTy <|> try primitiveTy <|> try tyVar <|> dataTy
@@ -65,11 +65,10 @@ ty = do tys <- ty' `sepBy1` (reservedOp "->")
                                    (reserved "Bool" >> return (TyPrimitive TyBool))
                                    
 expr = buildExpressionParser table term <?> "expression"
-    where table = [[Prefix (reservedOp "-" >> return UnaryMinus)],
-                   [Infix (whiteSpace >> return App) AssocLeft],
+    where table = [[Infix (whiteSpace >> return App) AssocLeft],
                    [Infix (reservedOp ":" >> return listcons) AssocRight],
                    [binary "*" OpMul, binary "/" OpDiv],
-                   [binary "+" OpAdd, binary "-" OpSub],
+                   [binary "+" OpAdd, binary "-" OpSub, Prefix (reservedOp "-" >> return UnaryMinus)],
                    [binary "%" OpMod],
                    [binary "==" OpEq, binary "<=" OpLe, binary "<" OpLt, binary ">" OpGt, binary ">=" OpGe],
                    [binary "||" OpOr],

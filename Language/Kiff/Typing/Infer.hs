@@ -4,13 +4,14 @@ import Language.Kiff.Syntax
 import Language.Kiff.Typing.Substitution
 import Language.Kiff.Typing.Unify
 import Language.Kiff.Typing.Instantiate
-
+import Language.Kiff.CallGraph
+    
 import qualified Data.Map as Map
 import Data.Supply
-import Control.Monad.State
+import Data.Either
 
-import Debug.Trace
-
+import Debug.Trace    
+    
 data Ctx = Ctx { conmap :: Map.Map DataName Ty,
                  varmap :: Map.Map VarName (Ty, Bool)}
          deriving Show
@@ -24,29 +25,67 @@ tyApp = foldr1 TyApp
 mkCtx :: Supply TvId -> Ctx
 mkCtx ids = Ctx { conmap = Map.fromList [("nil", tyList),
                                          ("cons", tyFun [TyVarId i, tyList, tyList])],
-                  varmap = Map.empty }
+                  varmap = Map.fromList [("not",  (tyFun [TyPrimitive TyBool, TyPrimitive TyBool], True))]
+                }
     where i = supplyValue ids
           tyList = TyApp (TyData "list") (TyVarId i)
 
+addVar :: Ctx -> (VarName, (Ty, Bool)) -> Ctx
+addVar ctx@Ctx{varmap = varmap} (name, (ty, poly)) = ctx{varmap = varmap'}
+    where varmap' = Map.insert name (ty, poly) varmap
+                   
 addMonoVar :: Ctx -> (VarName, Ty) -> Ctx
-addMonoVar ctx@Ctx{varmap = varmap} (name, ty) = ctx{varmap = varmap'}
-    where varmap' = Map.insert name (ty, False) varmap
+addMonoVar ctx (name, ty) = addVar ctx (name, (ty, False))
+
+addPolyVar :: Ctx -> (VarName, Ty) -> Ctx
+addPolyVar ctx (name, ty) = addVar ctx (name, (ty, True))
 
 inferDef :: Supply TvId -> Ctx -> Def -> Either [UnificationError] Ty
 inferDef ids ctx (Def name decl defs) = case unify eqs of
                                           Left errs -> Left errs
                                           Right s -> fitDecl (xform s tau)
     where tau = TyVarId $ supplyValue ids
-          ctx' = addMonoVar ctx (name, tau)
           (tys, eqss) = unzip $ zipWith collect (split ids) defs
           eqs = (map (tau :=:) tys) ++ (concat eqss)
-          collect ids def = collectDefEq ids ctx' def
+          collect ids def = collectDefEq ids ctx def
 
           fitDecl tau' = case decl of
                          Nothing -> Right tau'
                          Just ty -> case checkDecl ty tau' of
                                       Left errs -> Left $ (CantFitDecl ty tau'):errs
                                       Right _ -> Right ty
+
+inferDefs :: Supply TvId -> Ctx -> [Def] -> Either [UnificationError] Ctx
+inferDefs ids ctx defs = foldl step (Right ctx) $ zip (split ids) $ trace (show $ map (map (\ (Def name _ _) -> name)) defgroups) $ defgroups
+    where defgroups = sortDefs defs
+          inferGroup ids ctx defs = case foldl combine (Right []) polyvars of
+                                      Left err -> Left err
+                                      Right eqs -> case unify eqs of
+                                                     Left err -> Left err
+                                                     Right s -> Right $ map (xformPoly s) polyvars
+              where  (ids', ids'') = split2 ids
+                                   
+                     ctx' = foldl (\ ctx (name, _, ty) -> addMonoVar ctx (name, ty)) ctx vars
+                     vars = zipWith mkVar (split ids'') defs
+                            where  mkVar ids def@(Def name _ _) = (name, def, TyVarId $ supplyValue ids)
+                                                                  
+                     infer ids (name, def, tau) = (name, tau, inferDef ids ctx' def)
+
+                     polyvars = zipWith infer (split ids') vars
+                     xformPoly s (name, tau, tau') = (name, xform s tau)
+                                                
+                     combine (Right eqs)  (name, tau, Right tau')   = Right $ (tau :=: tau'):eqs
+                     combine (Right _)    (name, _, Left err')  = Left err'
+                     combine (Left err)   (name, _, Left err')  = Left $ err ++ err'
+                     combine (Left err)   _                     = Left err
+                                                                  
+          step (Left err) (ids, defs) = Left err
+                                        -- case inferGroup ids ctx defs of
+                                        --   Left err'  -> Left $ err ++ err'
+                                        --   Right _    -> Left err
+          step (Right ctx) (ids, defs) = case inferGroup ids ctx defs of
+                                           Left err    -> Left err
+                                           Right vars  -> Right $ foldl addPolyVar ctx vars
 
 collectDefEq :: Supply TvId -> Ctx -> DefEq -> (Ty, [TyEq])
 collectDefEq ids ctx (DefEq pats body) = (tau, peqs ++ beqs)
@@ -60,25 +99,26 @@ collectDefEq ids ctx (DefEq pats body) = (tau, peqs ++ beqs)
 collectExpr :: Supply TvId -> Ctx -> Expr -> (Ty, [TyEq])
 collectExpr ids ctx (Var var) = case Map.lookup var (varmap ctx) of
                                   Just (tau, poly) -> (if poly then instantiate ids tau else tau, [])
+                                  Nothing -> error $ show (var, map fst $ Map.toList $ varmap ctx)
 collectExpr ids ctx (Con con) = case Map.lookup con (conmap ctx) of
                                   Just t -> (instantiate ids t, [])
 collectExpr ids ctx (App f x) = (tau, (ft :=: TyFun xt tau):(feqs ++ xeqs))
-    where  (ids1, ids2) = split2 ids
-           (ft, feqs) = collectExpr ids1 ctx f
-           (xt, xeqs) = collectExpr ids2 ctx x
+    where  (ids', ids'') = split2 ids
+           (ft, feqs) = collectExpr ids' ctx f
+           (xt, xeqs) = collectExpr ids'' ctx x
            tau = TyVarId $ supplyValue ids              
 collectExpr ids ctx (PrimBinOp op left right) = (alpha, (tau :=: tau'):(leqs ++ reqs))
-    where  (ids1, ids2) = split2 ids
-           (lt, leqs) = collectExpr ids1 ctx left
-           (rt, reqs) = collectExpr ids2 ctx right
+    where  (ids', ids'') = split2 ids
+           (lt, leqs) = collectExpr ids' ctx left
+           (rt, reqs) = collectExpr ids'' ctx right
            (t1, t2, t3) = typeOfOp op
            tau = tyFun  [TyPrimitive t1, TyPrimitive t2, TyPrimitive t3]
            alpha = TyVarId $ supplyValue ids
            tau' = tyFun [lt, rt, alpha]               
 collectExpr ids ctx (IfThenElse cond thn els) = (alpha, eqs++ceqs++teqs++eeqs)
-    where  (ids1, ids2, ids3) = split3 ids
-           (ct, ceqs) = collectExpr ids1 ctx cond
-           (tt, teqs) = collectExpr ids2 ctx thn
+    where  (ids', ids'', ids3) = split3 ids
+           (ct, ceqs) = collectExpr ids' ctx cond
+           (tt, teqs) = collectExpr ids'' ctx thn
            (et, eeqs) = collectExpr ids3 ctx els
            alpha = TyVarId $ supplyValue ids
            eqs = [tt :=: alpha, et :=: alpha, ct :=: TyPrimitive TyBool]               
@@ -86,11 +126,15 @@ collectExpr ids ctx (IntLit _) = (TyPrimitive TyInt, [])
 collectExpr ids ctx (BoolLit _) = (TyPrimitive TyBool, [])
 collectExpr ids ctx (UnaryMinus e) = (tyInt, (tyInt :=: tau):eqs)
     where  (tau, eqs) = collectExpr ids ctx e
-           tyInt = TyPrimitive TyBool
+           tyInt = TyPrimitive TyInt
 collectExpr ids ctx (Lam pats body) = (tyFun (pts ++ [tau]), peqs ++ eqs)
-    where  (ids1, ids2) = split2 ids
-           (pts, ctx', peqs) = inferPats ids1 ctx pats
-           (tau, eqs) = collectExpr ids2 ctx' body
+    where  (ids', ids'') = split2 ids
+           (pts, ctx', peqs) = inferPats ids' ctx pats
+           (tau, eqs) = collectExpr ids'' ctx' body
+collectExpr ids ctx (Let defs body) = collectExpr ids' ctx' body
+    where (ids', ids'') = split2 ids
+          ctx' = case inferDefs ids'' ctx defs of
+                   Right ctx' -> ctx' -- TODO: error handling
                                          
 collectPats :: Supply TvId -> Ctx -> [Pat] -> ([Ty], [(VarName, Ty)], [TyEq])
 collectPats ids ctx pats = (tys, binds, eqs)
@@ -121,7 +165,10 @@ intOp = (TyInt, TyInt, TyInt)
 intRel = (TyInt, TyInt, TyBool)
 boolOp = (TyBool, TyBool, TyBool)
         
-typeOfOp OpAdd = intOp
-typeOfOp OpSub = intOp
-typeOfOp OpMul = intOp
-typeOfOp OpMod = intOp
+typeOfOp OpAdd  = intOp
+typeOfOp OpSub  = intOp
+typeOfOp OpMul  = intOp
+typeOfOp OpMod  = intOp
+typeOfOp OpAnd  = boolOp
+typeOfOp OpOr   = boolOp
+typeOfOp OpEq   = intRel -- TODO
