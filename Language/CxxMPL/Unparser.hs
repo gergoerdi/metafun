@@ -1,17 +1,12 @@
-module Language.CxxMPL.Unparser where
+module Language.CxxMPL.Unparser (unparse) where
 
 import Language.CxxMPL.Syntax
 import Text.PrettyPrint
+import Data.List
+    
+class (Unparse a) where
+    unparse :: a -> Doc
 
-unparseMetaTy :: MetaTy -> Doc
-unparseMetaTy MetaInt = text "int"
-unparseMetaTy MetaBool = text "bool"
-unparseMetaTy MetaTypename = text "typename"
-
-unparseTy :: Ty -> Doc
-unparseTy TyInt = text "int"
-unparseTy TyBool = text "bool"
-                             
 langle = char '<'
 rangle = char '>'         
 angles d = langle <+> d <+> rangle
@@ -24,59 +19,73 @@ varname name = text name
               
 field :: String -> Ty -> Expr -> Doc
 field name ty expr = hsep [text "static const",
-                           unparseTy ty,
+                           unparse ty,
                            varname name,
                            equals,
-                           unparseExpr expr,
+                           unparse expr,
                            semi]
+
+template :: Bool -> [Doc] -> Doc
+template  False  []    = empty
+template  _      docs  = text "template" <> anglelist docs
 
 bool :: Bool -> Doc              
 bool True   = text "true"
 bool False  = text "false"
 
-template :: Bool -> [Doc] -> Doc
-template  False  []    = empty
-template _      docs  = text "template" <+> anglelist docs
+instance (Unparse MetaTy) where
+    unparse MetaInt       = text "int"
+    unparse MetaBool      = text "bool"
+    unparse MetaTypename  = text "typename"
 
-unparseMetaDecl :: MetaDecl -> Doc
-unparseMetaDecl (MetaDecl name mtys) = template False (map unparseMetaTy mtys) <+> struct name <> semi
+instance (Unparse Ty) where
+    unparse TyInt   = text "int"
+    unparse TyBool  = text "bool" 
 
-unparseMetaVarDecl :: MetaVarDecl -> Doc
-unparseMetaVarDecl (MetaVarDecl name mty) = unparseMetaTy mty <+> varname name
+instance (Unparse MetaDecl) where
+    unparse (MetaDecl name mtys) = template False (map unparse mtys) <+> struct name <> semi
 
-unparseMetaBody :: (Ty, Expr) -> Doc
-unparseMetaBody (ty, expr) = field "v" ty expr
+instance (Unparse MetaVarDecl) where                                
+    unparse (MetaVarDecl name mty) = unparse mty <+> varname name
 
-unparseField (Field name (ty, expr)) = field name ty expr                             
-                             
-unparseMetaDef :: MetaDef -> Doc
-unparseMetaDef mdef = vcat [template True formals,
-                            struct name <> anglelist (map unparseMetaExpr spec),
-                            lbrace,
-                            nest 2 $ vcat (map unparseField fields) $+$ unparseMetaBody body,
-                            rbrace] <> semi
-    where formals = map unparseMetaVarDecl $ mdefFormals mdef
-          name = mdefName mdef
-          spec = mdefSpec mdef
-          body = mdefBody mdef
-          fields = mdefFields mdef
+instance (Unparse Field) where                             
+    unparse (Field name (ty, expr)) = field name ty expr                             
 
-unparseMetaExpr (MetaVar var)      = text var
-unparseMetaExpr (MetaBoolLit b)    = bool b
-unparseMetaExpr (MetaIntLit i)     = int i
-unparseMetaExpr (MetaCall var es)  = text var <> anglelist (map unparseMetaExpr es)
+instance (Unparse MetaDef) where                                      
+    unparse mdef = vcat [template True formals,
+                         struct name <> anglelist (map unparse spec),
+                         lbrace,
+                         nest 2 $ vcat (map unparse fields) $+$ field "v" ty body,
+                         rbrace] <> semi
+        where formals = map unparse $ mdefFormals mdef
+              name = mdefName mdef
+              spec = mdefSpec mdef
+              (ty, body) = mdefBody mdef
+              fields = mdefFields mdef              
 
-unparseExpr (FormalRef v) = varname v
-unparseExpr (VarRef v) = varname v
-unparseExpr (Cons cons args) = varname cons <+> anglelist (map unparseExpr args)
-unparseExpr (Call fun args) = varname fun <+> anglelist (map unparseExpr args) <> colon <> colon <> text "v"
-unparseExpr (IntLit i) = int i
-unparseExpr (PrimBinOp op left right) = unparseExpr left <+> unparseOp op <+> unparseExpr right
+instance (Unparse MetaExpr) where                     
+    unparse (MetaVar var)      = text var
+    unparse (MetaBoolLit b)    = bool b
+    unparse (MetaIntLit i)     = int i
+    unparse (MetaCall var es)  = text var <> anglelist (map unparse es)
 
-unparseOp OpAdd  = text "+"
-unparseOp OpEq   = text "=="
-unparseOp OpMod  = text "%"
-                                     
+instance (Unparse Expr) where                                 
+    unparse (FormalRef v)              = varname v
+    unparse (VarRef v)                 = varname v
+    unparse (Cons cons args)           = varname cons <> anglelist (map unparse args)
+    unparse (Call fun args)            = varname fun <> anglelist (map unparse args) <> colon <> colon <> text "v"
+    unparse (IntLit i) = int i
+    unparse (PrimBinOp op left right)  = unparse left <+> unparse op <+> unparse right
+
+instance (Unparse PrimitiveOp) where
+    unparse OpAdd  = text "+"
+    unparse OpEq   = text "=="
+    unparse OpMod  = text "%" 
+
+instance (Unparse Program) where
+    unparse (Program metadecls metadefs) = foldl ($+$) empty docs
+        where docs = map unparse metadecls ++ [text ""] ++ (intersperse (text "") $ map unparse metadefs)
+        
 testDecl = MetaDecl "search_i" [MetaInt, MetaBool, MetaBool, MetaTypename]
 testDef = MetaDef { mdefName = "search_i",
                     mdefFormals = [MetaVarDecl "length" MetaInt,
@@ -92,15 +101,18 @@ testDef = MetaDef { mdefName = "search_i",
                     mdefBody = (TyInt, Call "search" [FormalRef "length", Cons "Cons" [PrimBinOp OpAdd (FormalRef "digit") (IntLit 1), FormalRef "rest"]])
                   }
                                
-                               
+
+testDecl' = MetaDecl "divisor_test" [MetaTypename]
+          
 testDef' = MetaDef { mdefName = "divisor_test",
                      mdefFormals = [MetaVarDecl "first" MetaInt,
                                     MetaVarDecl "rest" MetaTypename],
-                    mdefSpec = [MetaCall "Cons" [MetaVar "first", MetaVar "rest"]],
-                    mdefFields = [Field "num" (TyInt, Call "value" [Cons "Cons" [FormalRef "first", FormalRef "rest"]]),
-                                  Field "div" (TyInt, Call "length" [Cons "Cons" [FormalRef "first", FormalRef "rest"]]),
-                                  Field "mod" (TyInt, PrimBinOp OpMod (VarRef "num") (VarRef "div"))],
-                    mdefBody = (TyBool, PrimBinOp OpEq (VarRef "mod") (IntLit 0))
+                     mdefSpec = [MetaCall "Cons" [MetaVar "first", MetaVar "rest"]],
+                     mdefFields = [Field "num" (TyInt, Call "value" [Cons "Cons" [FormalRef "first", FormalRef "rest"]]),
+                                   Field "div" (TyInt, Call "length" [Cons "Cons" [FormalRef "first", FormalRef "rest"]]),
+                                   Field "mod" (TyInt, PrimBinOp OpMod (VarRef "num") (VarRef "div"))],
+                     mdefBody = (TyBool, PrimBinOp OpEq (VarRef "mod") (IntLit 0))
                   }
                                
                                
+testProg = Program [testDecl'] [testDef']

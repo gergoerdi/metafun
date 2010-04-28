@@ -16,6 +16,8 @@ data Ty = TyInt
                       
 data MetaDecl = MetaDecl MetaVarName [MetaTy] deriving Show
 
+data TypedExpr = TypedExpr Ty Expr              
+              
 data MetaDef = MetaDef { mdefName :: MetaVarName,
                          mdefFormals :: [MetaVarDecl],
                          mdefSpec :: [MetaSpecialization],
@@ -53,3 +55,5 @@ data PrimitiveOp  = OpAdd
                   | OpGe
                   | OpGt
                   deriving Show
+
+data Program = Program [MetaDecl] [MetaDef]
