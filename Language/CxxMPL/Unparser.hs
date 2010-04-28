@@ -74,13 +74,19 @@ instance (Unparse Expr) where
     unparse (VarRef v)                 = varname v
     unparse (Cons cons args)           = varname cons <> anglelist (map unparse args)
     unparse (Call fun args)            = varname fun <> anglelist (map unparse args) <> colon <> colon <> text "v"
-    unparse (IntLit i) = int i
-    unparse (PrimBinOp op left right)  = unparse left <+> unparse op <+> unparse right
-
+    unparse (IntLit i)                 = int i
+    unparse (BoolLit True)             = text "true"
+    unparse (BoolLit False)            = text "false"
+    unparse (PrimBinOp op left right)  = parens (unparse left) <+> unparse op <+> parens (unparse right)
+    unparse (UnaryMinus expr)          = parens (text "-" <> parens (unparse expr))
+                                         
 instance (Unparse PrimitiveOp) where
     unparse OpAdd  = text "+"
     unparse OpEq   = text "=="
-    unparse OpMod  = text "%" 
+    unparse OpMod  = text "%"
+    unparse OpMul  = text "*"
+    unparse OpOr   = text "||"
+    unparse OpAnd  = text "&&"
 
 instance (Unparse Program) where
     unparse (Program metadecls metadefs) = foldl ($+$) empty docs

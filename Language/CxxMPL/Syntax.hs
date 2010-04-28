@@ -40,6 +40,7 @@ data Expr  = PrimBinOp PrimitiveOp Expr Expr
            | VarRef VarName
            | BoolLit Bool
            | IntLit Int
+           | UnaryMinus Expr
            deriving Show
 
 data PrimitiveOp  = OpAdd
