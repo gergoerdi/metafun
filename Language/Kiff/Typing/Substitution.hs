@@ -15,6 +15,7 @@ xform s t@(TyData _)       = t
 xform s t@(TyPrimitive _)  = t
 xform s (TyFun t u)        = TyFun (xform s t) (xform s u)
 xform s (TyApp t u)        = TyApp (xform s t) (xform s u)
+xform s (TyList t)         = TyList (xform s t)
 xform s (TyVarId x)        = case Map.lookup x m of
                                Nothing -> TyVarId x
                                Just t  -> xform s t

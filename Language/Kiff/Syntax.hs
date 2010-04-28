@@ -13,9 +13,23 @@ data Ty  = TyVar TvName
          | TyFun Ty Ty
          | TyApp Ty Ty
          | TyData DataName
+         | TyList Ty
          | TyPrimitive TyPrimitive
-         deriving Show
 
+instance Show Ty where
+    show ty = show' False ty
+        where show' p (TyVar v) = v
+              show' p (TyVarId x) = "t" ++ (show x)
+              show' p (TyFun t t') = parenIf p $ unwords [show' True t, "->", show' False t']
+              show' p (TyList t) = "[" ++ (show' False t) ++ "]"
+              show' p (TyApp t t') = unwords [show' True t, show' False t']
+              show' p (TyData d) = d
+              show' p (TyPrimitive TyInt) = "Int"
+              show' p (TyPrimitive TyBool) = "Bool"
+
+              parenIf False s = s
+              parenIf True  s = "(" ++ s ++ ")"
+                  
 
 type VarName = String
 type ConName = String
@@ -37,8 +51,8 @@ data PrimitiveOp  = OpAdd
                   | OpLt
                   | OpGe
                   | OpGt
-                  deriving Show
-    
+                  deriving Show                           
+                           
 data Expr  = Var VarName
            | Con ConName
            | App Expr Expr
@@ -49,16 +63,41 @@ data Expr  = Var VarName
            | IntLit Int
            | BoolLit Bool
            | UnaryMinus Expr
-             deriving Show
+           deriving Show
 
+-- Typed expression (result of type inference)
+data TExpr = TVar Ty VarName
+           | TCon Ty ConName
+           | TApp Ty TExpr TExpr
+           | TLam Ty [TPat] TExpr
+           | TLet Ty [TDef] TExpr
+           | TPrimBinOp Ty PrimitiveOp TExpr TExpr
+           | TIfThenElse Ty TExpr TExpr TExpr
+           | TIntLit Int
+           | TBoolLit Bool
+           | TUnaryMinus TExpr
+           deriving Show
+                      
 data Pat  = PVar VarName
           | PApp ConName [Pat]
           | Wildcard
           | IntPat Int
           | BoolPat Bool
-            deriving Show
+          deriving Show
+
+-- Typed pattern
+data TPat = TPVar Ty VarName
+          | TPApp Ty ConName [TPat]
+          | TWildcard Ty
+          | TIntPat Int
+          | TBoolPat Bool
+          deriving Show
                      
 data DefEq = DefEq [Pat] Expr deriving Show
 data Def = Def VarName (Maybe Ty) [DefEq] deriving Show
 
+data TDefEq = TDefEq Ty [TPat] TExpr deriving Show
+data TDef = TDef Ty VarName (Maybe Ty) [TDefEq] deriving Show         
+         
 data Program = Program [TypeDecl] [Def] deriving Show
+data TProgram = TProgram [TypeDecl] [TDef] deriving Show

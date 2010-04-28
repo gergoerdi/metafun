@@ -66,6 +66,8 @@ instantiateM (TyFun t u)   = do t' <- instantiateM t
 instantiateM (TyApp t u)   = do t' <- instantiateM t
                                 u' <- instantiateM u
                                 return $ TyApp t' u'
+instantiateM (TyList t)    = do t' <- instantiateM t
+                                return $ TyList t'
 instantiateM ty            = return ty
            
 instantiate :: Supply TvId -> Ty -> Ty

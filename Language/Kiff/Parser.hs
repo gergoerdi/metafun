@@ -52,8 +52,7 @@ ty = do tys <- ty' `sepBy1` (reservedOp "->")
                      term =  parens ty <|> listTy <|> try primitiveTy <|> try tyVar <|> dataTy
 
                      listTy = do tyElem <- brackets ty
-                                 -- TODO
-                                 return $ TyApp (TyData "list") tyElem
+                                 return $ TyList tyElem
 
                      tyVar = do tv <- varname
                                 return $ TyVar tv

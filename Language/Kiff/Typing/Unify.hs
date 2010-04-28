@@ -32,6 +32,7 @@ unifyEq (TyVarId x)      t'               | occurs x t' = OccursFailed
 unifyEq t                (TyVarId y)                    = Flip Incongruent
 unifyEq (TyFun t u)      (TyFun t' u')                  = Recurse [t :=: t', u :=: u']
 unifyEq (TyApp t u)      (TyApp t' u')                  = Recurse [t :=: t', u :=: u']
+unifyEq (TyList t)       (TyList t')                    = Recurse [t :=: t']
 unifyEq _                _                              = Incongruent
 
 unify' :: Bool -> [TyEq] -> Either [UnificationError] Subst
@@ -46,11 +47,14 @@ unify' leftOnly  ((t :=: t'):eqs)  = process $ unifyEq t t'
                                         Left es -> Left es
                                         Right s -> Right $ add s x t
               where eqs' = map (\ (t :=: t') -> (xform s t) :=: (xform s t')) eqs
-                    s = add empty x t
+                        where s = add empty x t
 
           addError e = case unify' leftOnly eqs of
                          Left es -> Left $ e:es
                          Right _ -> Left $ [e]
 
+unify :: [TyEq] -> Either [UnificationError] Subst                                    
 unify = unify' False
+
+checkDecl :: Ty -> Ty -> Either [UnificationError] Subst                                    
 checkDecl tyDecl ty = unify' True [ty :=: tyDecl]
