@@ -7,7 +7,7 @@ data MetaVarDecl = MetaVarDecl MetaVarName MetaTy deriving Show
                  
 data MetaTy  =  MetaInt
              |  MetaBool
-             |  MetaTypename
+             |  MetaClass [MetaTy]
              deriving Show
 
 data Ty = TyInt

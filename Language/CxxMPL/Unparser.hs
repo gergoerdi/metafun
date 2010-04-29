@@ -34,9 +34,9 @@ bool True   = text "true"
 bool False  = text "false"
 
 instance (Unparse MetaTy) where
-    unparse MetaInt       = text "int"
-    unparse MetaBool      = text "bool"
-    unparse MetaTypename  = text "typename"
+    unparse MetaInt           = text "int"
+    unparse MetaBool          = text "bool"
+    unparse (MetaClass mtys)  = (template False $ (map unparse mtys)) <+> text "class"
 
 instance (Unparse Ty) where
     unparse TyInt   = text "int"
@@ -92,13 +92,13 @@ instance (Unparse Program) where
     unparse (Program metadecls metadefs) = foldl ($+$) empty docs
         where docs = map unparse metadecls ++ [text ""] ++ (intersperse (text "") $ map unparse metadefs)
         
-testDecl = MetaDecl "search_i" [MetaInt, MetaBool, MetaBool, MetaTypename]
+testDecl = MetaDecl "search_i" [MetaInt, MetaBool, MetaBool, (MetaClass [])]
 testDef = MetaDef { mdefName = "search_i",
                     mdefFormals = [MetaVarDecl "length" MetaInt,
                                    MetaVarDecl "good" MetaBool,
                                    MetaVarDecl "final" MetaBool,
                                    MetaVarDecl "digit" MetaInt,
-                                   MetaVarDecl "rest" MetaTypename],
+                                   MetaVarDecl "rest" (MetaClass [])],
                     mdefSpec = [MetaVar "length",
                                 MetaVar "good",
                                 MetaVar "final",
@@ -108,11 +108,11 @@ testDef = MetaDef { mdefName = "search_i",
                   }
                                
 
-testDecl' = MetaDecl "divisor_test" [MetaTypename]
+testDecl' = MetaDecl "divisor_test" [MetaClass []]
           
 testDef' = MetaDef { mdefName = "divisor_test",
                      mdefFormals = [MetaVarDecl "first" MetaInt,
-                                    MetaVarDecl "rest" MetaTypename],
+                                    MetaVarDecl "rest" (MetaClass [])],
                      mdefSpec = [MetaCall "Cons" [MetaVar "first", MetaVar "rest"]],
                      mdefFields = [Field "num" (TyInt, Call "value" [Cons "Cons" [FormalRef "first", FormalRef "rest"]]),
                                    Field "div" (TyInt, Call "length" [Cons "Cons" [FormalRef "first", FormalRef "rest"]]),
