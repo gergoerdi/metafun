@@ -7,6 +7,8 @@ import Language.Kiff.Typing
 import Language.Kiff.Typing.Infer
 import Data.Supply    
 import Language.CxxMPL.Unparser
+
+import Control.Monad.State    
     
 mkIds :: IO (Supply TvId)
 mkIds = newEnumSupply
@@ -19,5 +21,5 @@ test = do Right prog@(Program decls defs) <- parseFile "lorentey-c++-tmp.hs"
               tprog = Program decls tdefs
           print ctx'
           print tprog
-          let mpl = compile tprog
+          let mpl = evalState (compile tprog) mkCompilerState
           print $ unparse mpl
