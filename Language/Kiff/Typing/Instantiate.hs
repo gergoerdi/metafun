@@ -4,6 +4,7 @@ import Language.Kiff.Syntax
 import Language.Kiff.Typing
 
 import qualified Data.Map as Map
+import Data.Maybe
 import Data.Supply
 import Control.Monad.State
 
@@ -41,8 +42,18 @@ ensureTv v = do lookup <- getTv v
                   Nothing -> instTv v
 
 
+isMonoVar :: Tv -> Inst Bool
+isMonoVar v = do St{ctx = ctx} <- get
+                 return $ any (occurs v) (monoTys ctx)
+    where monoTys ctx = mapMaybe unpack $ Map.elems (varmap ctx)
+              where unpack (Poly _) = Nothing
+                    unpack (Mono tau) = Just tau
+                             
 instantiateM :: Ty -> Inst Ty
-instantiateM (TyVar v)     = liftM TyVar $ ensureTv v
+instantiateM (TyVar v)     = do mono <- isMonoVar v
+                                if mono
+                                   then return $ TyVar v
+                                   else liftM TyVar $ ensureTv v
 instantiateM (TyFun t u)   = do t' <- instantiateM t
                                 u' <- instantiateM u
                                 return $ TyFun t' u'

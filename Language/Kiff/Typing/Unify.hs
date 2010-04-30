@@ -1,10 +1,9 @@
-module Language.Kiff.Typing.Unify (UnificationError(..), TyEq(..), unify, fitDecl) where
+module Language.Kiff.Typing.Unify (UnificationError(..), unify, fitDecl) where
 
 import Language.Kiff.Syntax
+import Language.Kiff.Typing
 import Language.Kiff.Typing.Substitution
     
-data TyEq = Ty :=: Ty deriving Show
-          
 data UnificationError  = InfiniteType Ty Ty
                        | Unsolvable Ty Ty
                        | CantFitDecl Ty Ty
@@ -17,12 +16,6 @@ data Unification  = Skip
                   | Substitute Tv Ty
                   | Recurse [TyEq]
 
-occurs :: Tv -> Ty -> Bool
-occurs v (TyVar v')   = v == v'
-occurs v (TyFun t u)  = occurs v t || occurs v u
-occurs v (TyApp t u)  = occurs v t || occurs v u
-occurs v _            = False                         
-                    
 unifyEq :: Ty -> Ty -> Unification
 unifyEq (TyPrimitive p)  (TyPrimitive p')               = if p == p' then Skip else Incongruent
 unifyEq (TyData d)       (TyData d')                    = if d == d' then Skip else Incongruent

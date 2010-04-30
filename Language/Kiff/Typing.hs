@@ -5,6 +5,8 @@ import Language.Kiff.Syntax
 import qualified Data.Map as Map
 import Data.Supply
 
+data TyEq = Ty :=: Ty deriving Show
+          
 class Typed a where
     getTy :: a -> Ty
     mapTy :: (Ty -> Ty) -> a -> a
@@ -93,3 +95,10 @@ addMonoVar ctx (name, ty) = addVar ctx (name, (Mono ty))
 
 addPolyVar :: Ctx -> (VarName, Ty) -> Ctx
 addPolyVar ctx (name, ty) = addVar ctx (name, (Poly ty))
+
+occurs :: Tv -> Ty -> Bool
+occurs v (TyVar v')   = v == v'
+occurs v (TyFun t u)  = occurs v t || occurs v u
+occurs v (TyApp t u)  = occurs v t || occurs v u
+occurs v _            = False                         
+                    
