@@ -115,8 +115,11 @@ collectExpr ids ctx (IfThenElse _ cond thn els) = (IfThenElse alpha cond' thn' e
 collectExpr ids ctx (IntLit _ n) = (IntLit (TyPrimitive TyInt) n, [])
 collectExpr ids ctx (BoolLit _ b) = (BoolLit (TyPrimitive TyBool) b, [])
 collectExpr ids ctx (UnaryMinus _ e) = (UnaryMinus (TyPrimitive TyInt) e', (TyPrimitive TyInt :=: tau):eqs)
-    where  (e', eqs) = collectExpr ids ctx e
+    where  (e', eqs) = collectExpr ids ctx e           
            tau = getTy e'
+collectExpr ids ctx (Not _ e) = (Not (TyPrimitive TyBool) e', (TyPrimitive TyBool :=: tau):eqs)
+    where (e', eqs) = collectExpr ids ctx e
+          tau = getTy e'
 collectExpr ids ctx (Lam _ pats body) = (Lam (tyFun (pts ++ [tau])) tpats tbody, peqs ++ eqs)
     where  (ids', ids'') = split2 ids
            (tpats, ctx', peqs) = inferPats ids' ctx pats

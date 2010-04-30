@@ -1,8 +1,10 @@
 module Language.CxxMPL.Unparser (unparse) where
 
 import Language.CxxMPL.Syntax
+
 import Text.PrettyPrint
 import Data.List
+import Data.Maybe
     
 class (Unparse a) where
     unparse :: a -> Doc
@@ -10,7 +12,7 @@ class (Unparse a) where
 langle = char '<'
 rangle = char '>'         
 angles d = langle <+> d <+> rangle
-anglelist = angles . hsep . punctuate comma                   
+anglelist = angles . hsep . punctuate comma
 
 struct :: String -> Doc            
 struct name = text "struct" <+> varname name
@@ -38,7 +40,7 @@ bool False  = text "false"
 instance (Unparse MetaTy) where
     unparse MetaInt           = text "int"
     unparse MetaBool          = text "bool"
-    unparse (MetaClass mtys)  = (template False $ (map unparse mtys)) <+> text "class"
+    unparse (MetaClass mtys)  = template False (map unparse mtys) <+> text "class"
 
 instance (Unparse Ty) where
     unparse TyInt   = text "int"
@@ -54,7 +56,7 @@ instance (Unparse Field) where
     unparse (Field name (ty, expr)) = field name ty expr                             
 
 instance (Unparse MetaDef) where                                      
-    unparse mdef = vcat [template True formals,
+    unparse mdef = vcat [template (isJust spec) formals,
                          struct name <> case spec of
                                           Nothing -> empty
                                           Just ms -> anglelist (map unparse ms),
@@ -71,7 +73,10 @@ instance (Unparse MetaExpr) where
     unparse (MetaVar var)      = text var
     unparse (MetaBoolLit b)    = bool b
     unparse (MetaIntLit i)     = int i
+    unparse (MetaCall var [])  = text var
     unparse (MetaCall var es)  = text var <> anglelist (map unparse es)
+    unparse (MetaBox TyInt e)  = unparse $ MetaCall "BoxedInt" [e]
+    unparse (MetaBox TyBool e) = unparse $ MetaCall "BoxedBool" [e]
                                  
 instance (Unparse Expr) where                                 
     unparse (Typename expr)            = text "typename" <+> unparse expr
@@ -81,13 +86,15 @@ instance (Unparse Expr) where
     unparse (Unbox TyBool expr)        = unparse $ Call "unboxBool" [expr]
     unparse (FormalRef v)              = varname v
     unparse (VarRef v)                 = varname v
+    unparse (Cons cons [])             = varname cons
     unparse (Cons cons args)           = varname cons <> anglelist (map unparse args)
     unparse (Call fun args)            = varname fun <> anglelist (map unparse args) <> colon <> colon <> text "v"
     unparse (IntLit i)                 = int i
     unparse (BoolLit True)             = text "true"
     unparse (BoolLit False)            = text "false"
     unparse (PrimBinOp op left right)  = parens (unparse left) <+> unparse op <+> parens (unparse right)
-    unparse (UnaryMinus expr)          = parens (text "-" <> parens (unparse expr))
+    unparse (Not expr)                 = text "!" <> parens (unparse expr)
+    unparse (UnaryMinus expr)          = parens $ text "-" <> parens (unparse expr)
                                          
 instance (Unparse PrimitiveOp) where
     unparse OpAdd  = text "+"

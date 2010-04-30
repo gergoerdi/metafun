@@ -23,9 +23,8 @@ compileDefEq name (Kiff.DefEq tau pats expr) =
                         isVar _               = False
               formals = concat formalss
     
--- compileTy (Kiff.TyPrimitive Kiff.TyInt)   = MPL.TyInt
--- compileTy (Kiff.TyPrimitive Kiff.TyBool)  = MPL.TyBool
-
+compileTy (Kiff.TyPrimitive Kiff.TyInt)   = MPL.TyInt
+compileTy (Kiff.TyPrimitive Kiff.TyBool)  = MPL.TyBool
 compileTy _ = MPL.TyClass
 
 convertTy (Kiff.TyPrimitive Kiff.TyInt) = MPL.TyInt
@@ -62,7 +61,9 @@ compileExpr (Kiff.Con tau con) = MPL.Cons con [] -- error $ unwords ["TCon", con
 compileExpr e@(Kiff.App tau f x) = mpl $ map compileExpr args
     where (fun:args) = uncurryApp e
           mpl = case fun of
-                  Kiff.Var _ var -> MPL.Typename . MPL.Call var
+                  Kiff.Var _ var -> case tau of
+                                      Kiff.TyPrimitive _  -> MPL.Call var
+                                      _                   -> MPL.Typename . MPL.Call var
                   Kiff.Con _ con -> MPL.Cons con
 compileExpr (Kiff.Lam tau pats body) = error "Lambdas not supported"
 compileExpr (Kiff.Let tau defs body) = undefined
@@ -78,14 +79,20 @@ compileExpr (Kiff.IntLit _ n) = box MPL.TyInt $ MPL.IntLit n
 compileExpr (Kiff.BoolLit _ b) = box MPL.TyBool $ MPL.BoolLit b
 compileExpr (Kiff.UnaryMinus _ e) = box MPL.TyInt $ MPL.UnaryMinus e'
     where e' = unbox MPL.TyInt $ compileExpr e
+compileExpr (Kiff.Not _ e) = box MPL.TyBool $ MPL.Not e'
+    where e' = unbox MPL.TyBool $ compileExpr e
 
-box t e = MPL.Box t e
-unbox t (MPL.Box t' e) | t == t'   = e
-                       | otherwise = error "Internal error: incompatible boxing/unboxing"
-unbox t e = MPL.Unbox t e
-               
--- compileMetaTy (Kiff.TyPrimitive Kiff.TyInt)   = MPL.MetaInt
--- compileMetaTy (Kiff.TyPrimitive Kiff.TyBool)  = MPL.MetaBool
+-- box t e = MPL.Box t e
+-- unbox t (MPL.Box t' e) | t == t'   = e
+--                        | otherwise = error "Internal error: incompatible boxing/unboxing"
+-- unbox t e = MPL.Unbox t e
+
+box t e = e
+unbox t e = e
+
+
+compileMetaTy (Kiff.TyPrimitive Kiff.TyInt)   = MPL.MetaInt
+compileMetaTy (Kiff.TyPrimitive Kiff.TyBool)  = MPL.MetaBool
 compileMetaTy tau@(Kiff.TyFun x y)              = MPL.MetaClass $ map compileMetaTy $ init $ uncurryTy tau
 compileMetaTy _                               = MPL.MetaClass [] -- TODO
 
@@ -98,21 +105,21 @@ compileOp Kiff.OpMod = MPL.OpMod
 compileOp Kiff.OpEq  = MPL.OpEq
 compileOp Kiff.OpAnd = MPL.OpAnd
 compileOp Kiff.OpOr  = MPL.OpOr
-                                                
-data DefEqSt = DefEqSt { metavarnum :: Int }
-type DE a = State DefEqSt a
 
-mkDefEqSt = DefEqSt { metavarnum = 0 }
+data CompilerState = CSt { unique :: Int }
+type Compile a = State CompilerState a
+                       
+mkCompilerState = CSt { unique = 0 }    
     
-newMetaVarName :: DE MPL.MetaVarName
+newMetaVarName :: Compile MPL.MetaVarName
 newMetaVarName = do st <- get
-                    let mvnum = metavarnum st
-                        mvnum' = mvnum + 1
-                        st' = st{metavarnum = mvnum'}
+                    let u = unique st
+                        u' = u + 1
+                        st' = st{unique = u'}
                     put st'
-                    return $ "_p" ++ (show mvnum)
+                    return $ "_p" ++ (show u)
 
-varsAndSpecM :: Kiff.TPat -> DE ([MPL.MetaVarDecl], MPL.MetaSpecialization)
+varsAndSpecM :: Kiff.TPat -> Compile ([MPL.MetaVarDecl], MPL.MetaSpecialization)
 varsAndSpecM (Kiff.PVar tau var)       = return ([MPL.MetaVarDecl var mty], MPL.MetaVar var)
     where mty = compileMetaTy tau
 varsAndSpecM (Kiff.PApp tau con pats)  = do
@@ -125,7 +132,7 @@ varsAndSpecM (Kiff.IntPat _ n)         = return ([], MPL.MetaIntLit n)
 varsAndSpecM (Kiff.BoolPat _ b)        = return ([], MPL.MetaBoolLit b)
 
 varsAndSpec :: Kiff.TPat -> ([MPL.MetaVarDecl], MPL.MetaSpecialization)
-varsAndSpec pat = evalState (varsAndSpecM pat) mkDefEqSt
+varsAndSpec pat = evalState (varsAndSpecM pat) mkCompilerState
               
 uncurryTy (Kiff.TyFun t t')  = (t:uncurryTy t')
 uncurryTy t                  = [t]

@@ -32,10 +32,14 @@ type MetaSpecialization = MetaExpr
 data MetaExpr  = MetaVar MetaVarName
                | MetaBoolLit Bool
                | MetaIntLit Int
-               | MetaCall MetaVarName [MetaExpr] deriving Show
+               | MetaCall MetaVarName [MetaExpr]
+               | MetaBox Ty MetaExpr
+               | MetaUnbox Ty MetaExpr
+               deriving Show
 
 data Expr  = Typename Expr
            | PrimBinOp PrimitiveOp Expr Expr
+           | Not Expr
            | Call MetaVarName [Expr]
            | Cons MetaVarName [Expr]
            | FormalRef MetaVarName

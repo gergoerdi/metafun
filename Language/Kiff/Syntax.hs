@@ -69,6 +69,7 @@ data Expr  tag = Var tag VarName
                | IntLit tag Int
                | BoolLit tag Bool
                | UnaryMinus tag (Expr tag)
+               | Not tag (Expr tag)
                deriving Show
 
 type TExpr = Expr Ty                        

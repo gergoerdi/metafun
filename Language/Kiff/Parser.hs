@@ -18,7 +18,7 @@ lexer = T.makeTokenParser $ L.haskellStyle {
           T.reservedNames = ["if", "then", "else", "True", "False", "let", "in", "data", "type"],
           T.reservedOpNames = ["::", "->", "=", "\\", "_", "|",
                                "*", "/", "+", "-", "%",
-                               "&&", "||",
+                               "!", "&&", "||",
                                "==", "<", ">", "<=", ">="]
          }
     
@@ -69,6 +69,7 @@ expr = buildExpressionParser table term <?> "expression"
                    [binary "+" OpAdd, binary "-" OpSub, Prefix (reservedOp "-" >> return (UnaryMinus ()))],
                    [binary "%" OpMod],
                    [binary "==" OpEq, binary "<=" OpLe, binary "<" OpLt, binary ">" OpGt, binary ">=" OpGe],
+                   [Prefix (reservedOp "!" >> return (Not ()))],
                    [binary "||" OpOr],
                    [binary "&&" OpAnd]]
                   -- TODO: ==, <=, ..

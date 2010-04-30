@@ -37,6 +37,7 @@ collectExpr :: S.Set VarName -> Expr a -> S.Set VarName
 collectExpr names (Var _ v) | v `S.member` names  = S.singleton v
 collectExpr names (App _ f x)                     = S.unions $ map (collectExpr names) [f, x]
 collectExpr names (PrimBinOp _ _ l r)             = S.unions $ map (collectExpr names) [l, r]
+collectExpr names (Not _ expr)                    = collectExpr names expr
 collectExpr names (IfThenElse _ cond thn els)     = S.unions $ map (collectExpr names) [cond, thn, els]
 collectExpr names (Lam _ pats body)               = collectExpr names' body
     where names' = names `S.difference` (collectPats pats)

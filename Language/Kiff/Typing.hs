@@ -50,7 +50,8 @@ instance Typed TExpr where
     getTy (IntLit tau _)          = tau
     getTy (BoolLit tau _)         = tau
     getTy (UnaryMinus tau _)      = tau
-                                   
+    getTy (Not tau expr)          = tau
+                                  
     mapTy f (Var tau var)                  = Var (f tau) var
     mapTy f (Con tau con)                  = Con (f tau) con
     mapTy f (App tau fun x)                = App (f tau) (mapTy f fun) (mapTy f x)
@@ -61,6 +62,7 @@ instance Typed TExpr where
     mapTy f (IntLit tau n)                 = IntLit (f tau) n
     mapTy f (BoolLit tau b)                = BoolLit (f tau) b
     mapTy f (UnaryMinus tau expr)          = UnaryMinus (f tau) (mapTy f expr)
+    mapTy f (Not tau expr)                 = Not (f tau) (mapTy f expr)
                                    
 data VarBind  = Mono Ty
               | Poly Ty
