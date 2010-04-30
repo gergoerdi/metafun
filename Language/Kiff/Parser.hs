@@ -13,8 +13,7 @@ import Control.Monad
 import Data.Char
 import Data.Either
 
-import Debug.Trace    
-    
+import Debug.Trace        
 lexer = T.makeTokenParser $ L.haskellStyle {
           T.reservedNames = ["if", "then", "else", "True", "False", "let", "in", "data", "type"],
           T.reservedOpNames = ["::", "->", "=", "\\", "_", "|",
@@ -64,17 +63,17 @@ ty = do tys <- ty' `sepBy1` (reservedOp "->")
                                    (reserved "Bool" >> return (TyPrimitive TyBool))
                                    
 expr = buildExpressionParser table term <?> "expression"
-    where table = [[Infix (whiteSpace >> return App) AssocLeft],
+    where table = [[Infix (whiteSpace >> return (App ())) AssocLeft],
                    [Infix (reservedOp ":" >> return listcons) AssocRight],
                    [binary "*" OpMul, binary "/" OpDiv],
-                   [binary "+" OpAdd, binary "-" OpSub, Prefix (reservedOp "-" >> return UnaryMinus)],
+                   [binary "+" OpAdd, binary "-" OpSub, Prefix (reservedOp "-" >> return (UnaryMinus ()))],
                    [binary "%" OpMod],
                    [binary "==" OpEq, binary "<=" OpLe, binary "<" OpLt, binary ">" OpGt, binary ">=" OpGe],
                    [binary "||" OpOr],
                    [binary "&&" OpAnd]]
                   -- TODO: ==, <=, ..
-              where binary op cb = Infix (reservedOp op >> return (PrimBinOp cb)) AssocLeft
-                    listcons left right = App (App (Con "cons") left) right
+              where binary op cb = Infix (reservedOp op >> return (PrimBinOp () cb)) AssocLeft
+                    listcons left right = App () (App () (Con () "cons") left) right
                   
           term = parens expr <|> list <|> intLit <|> boolLit <|> varref <|> con <|> lam <|> vars
 
@@ -82,28 +81,28 @@ expr = buildExpressionParser table term <?> "expression"
                     defs <- IP.block $ many1 $ def
                     reserved "in"
                     body <- expr
-                    return $ Let defs body
+                    return $ Let () defs body
                     
                  
           list = do elems <- brackets $ expr `sepBy` comma
-                    return $ foldr (\x xs -> App (App (Con "cons") x) xs) (Con "nil") elems
+                    return $ foldr (\x xs -> App () (App () (Con () "cons") x) xs) (Con () "nil") elems
                  
           intLit = do n <- natural -- TODO: integer fsck up "-" and "+"
-                      return $ IntLit (fromInteger n)
+                      return $ IntLit () (fromInteger n)
                              
-          boolLit = liftM BoolLit boollit
+          boolLit = liftM (BoolLit ()) boollit
 
           varref = do var <- varname
-                      return $ Var var
+                      return $ Var () var
 
           con = do c <- conname
-                   return $ Con c
+                   return $ Con () c
 
           lam = do reservedOp "\\"
                    pats <- many1 (try pat)
                    reservedOp "->"
                    body <- expr
-                   return $ Lam pats body
+                   return $ Lam () pats body
 
           ifthenelse = do reserved "if"
                           cond <- expr
@@ -111,7 +110,7 @@ expr = buildExpressionParser table term <?> "expression"
                           thn <- expr
                           reserved "else"
                           els <- expr
-                          return $ IfThenElse cond thn els
+                          return $ IfThenElse () cond thn els
 
 pat = buildExpressionParser table term <?> "pattern"
     where table = [[Infix (reservedOp ":" >> return listcons) AssocRight]]
@@ -119,39 +118,39 @@ pat = buildExpressionParser table term <?> "pattern"
 
           conpat = do con <- conname
                       pats <- many pat
-                      return $ PApp con pats
+                      return $ PApp () con pats
                               
           varpat = do v <- varname
-                      return $ PVar v
+                      return $ PVar () v
 
           wildcard = do reservedOp "_"
-                        return $ Wildcard
+                        return $ Wildcard ()
                              
           intpat = do i <- integer
-                      return $ IntPat $ fromInteger i
+                      return $ IntPat () $ fromInteger i
 
-          boolpat = liftM BoolPat boollit
+          boolpat = liftM (BoolPat ()) boollit
 
-          listcons head rest = PApp "cons" [head, rest]
+          listcons head rest = PApp () "cons" [head, rest]
                                
           list = do pats <- brackets $ pat `sepBy` comma
-                    return $ foldr listcons (PApp "nil" []) pats
+                    return $ foldr listcons (PApp () "nil" []) pats
                     
 
 defEq varname = do try $ symbol varname
                    pats <- many pat
                    reservedOp "="
                    body <- expr
-                   return $ DefEq pats body
+                   return $ DefEq () pats body
 
 def = do
         msig <- optionMaybe $ try $ IP.lineFold signature
         case msig of
           Just (v, sig)  -> do  eqs <- defEqs v
-                                return $ Def v (Just sig) eqs
+                                return $ Def () v (Just sig) eqs
           Nothing        -> do  v <- lookAhead varname
                                 eqs <- defEqs v
-                                return $ Def v Nothing eqs
+                                return $ Def () v Nothing eqs
 
     where signature = do v <- varname
                          reservedOp "::"

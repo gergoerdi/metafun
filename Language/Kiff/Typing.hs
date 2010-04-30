@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeSynonymInstances #-}
+
 module Language.Kiff.Typing where
 
 import Language.Kiff.Syntax
@@ -12,53 +14,53 @@ class Typed a where
     mapTy :: (Ty -> Ty) -> a -> a
 
 instance Typed TDef where
-    getTy (TDef tau name decl tdefeqs) = tau
-    mapTy f (TDef tau name decl tdefeqs) = TDef tau' name decl tdefeqs'
+    getTy (Def tau name decl tdefeqs) = tau
+    mapTy f (Def tau name decl defeqs) = Def tau' name decl defeqs'
         where tau' = f tau
-              tdefeqs' = map (mapTy f) tdefeqs
+              defeqs' = map (mapTy f) defeqs
 
 instance Typed TDefEq where
-    getTy (TDefEq tau tpats tbody) = tau
-    mapTy f (TDefEq tau tpats tbody) = TDefEq tau' tpats' tbody'
+    getTy (DefEq tau pats body) = tau
+    mapTy f (DefEq tau pats body) = DefEq tau' pats' body'
         where tau' = f tau
-              tpats' = map (mapTy f) tpats
-              tbody' = mapTy f tbody
+              pats' = map (mapTy f) pats
+              body' = mapTy f body
 
 instance Typed TPat where
-    getTy (TPVar tau _)    = tau
-    getTy (TPApp tau _ _)  = tau
-    getTy (TWildcard tau)  = tau
-    getTy (TIntPat _)    = TyPrimitive TyInt
-    getTy (TBoolPat _)   = TyPrimitive TyBool
+    getTy (PVar tau _)    = tau
+    getTy (PApp tau _ _)  = tau
+    getTy (Wildcard tau)  = tau
+    getTy (IntPat tau _)  = tau
+    getTy (BoolPat tau _) = tau
 
-    mapTy f (TPVar tau var)        = TPVar (f tau) var
-    mapTy f (TPApp tau con tpats)  = TPApp (f tau) con (map (mapTy f) tpats)
-    mapTy f (TWildcard tau)        = TWildcard (f tau)
-    mapTy f (TIntPat n)          = TIntPat n
-    mapTy f (TBoolPat b)         = TBoolPat b
+    mapTy f (PVar tau var)       = PVar (f tau) var
+    mapTy f (PApp tau con pats)  = PApp (f tau) con (map (mapTy f) pats)
+    mapTy f (Wildcard tau)       = Wildcard (f tau)
+    mapTy f (IntPat tau n)       = IntPat (f tau) n
+    mapTy f (BoolPat tau b)      = BoolPat (f tau) b
 
 instance Typed TExpr where
-    getTy (TVar tau _)             = tau
-    getTy (TCon tau _)             = tau
-    getTy (TApp tau _ _)           = tau
-    getTy (TLam tau _ _)           = tau
-    getTy (TLet tau _ _)           = tau
-    getTy (TPrimBinOp tau _ _ _)   = tau
-    getTy (TIfThenElse tau _ _ _)  = tau
-    getTy (TIntLit _)            = TyPrimitive TyInt
-    getTy (TBoolLit _)           = TyPrimitive TyBool
-    getTy (TUnaryMinus _)        = TyPrimitive TyInt
+    getTy (Var tau _)             = tau
+    getTy (Con tau _)             = tau
+    getTy (App tau _ _)           = tau
+    getTy (Lam tau _ _)           = tau
+    getTy (Let tau _ _)           = tau
+    getTy (PrimBinOp tau _ _ _)   = tau
+    getTy (IfThenElse tau _ _ _)  = tau
+    getTy (IntLit tau _)          = tau
+    getTy (BoolLit tau _)         = tau
+    getTy (UnaryMinus tau _)      = tau
                                    
-    mapTy f (TVar tau var)                  = TVar (f tau) var
-    mapTy f (TCon tau con)                  = TCon (f tau) con
-    mapTy f (TApp tau fun x)                = TApp (f tau) (mapTy f fun) (mapTy f x)
-    mapTy f (TLam tau pats body)            = TLam (f tau) (map (mapTy f) pats) (mapTy f body)
-    mapTy f (TLet tau defs body)            = TLet (f tau) (map (mapTy f) defs) (mapTy f body)
-    mapTy f (TPrimBinOp tau op left right)  = TPrimBinOp (f tau) op (mapTy f left) (mapTy f right)
-    mapTy f (TIfThenElse tau cond thn els)  = TIfThenElse (f tau) (mapTy f cond) (mapTy f thn) (mapTy f els)
-    mapTy f (TIntLit n)                   = TIntLit n
-    mapTy f (TBoolLit b)                  = TBoolLit b
-    mapTy f (TUnaryMinus expr)            = TUnaryMinus (mapTy f expr)
+    mapTy f (Var tau var)                  = Var (f tau) var
+    mapTy f (Con tau con)                  = Con (f tau) con
+    mapTy f (App tau fun x)                = App (f tau) (mapTy f fun) (mapTy f x)
+    mapTy f (Lam tau pats body)            = Lam (f tau) (map (mapTy f) pats) (mapTy f body)
+    mapTy f (Let tau defs body)            = Let (f tau) (map (mapTy f) defs) (mapTy f body)
+    mapTy f (PrimBinOp tau op left right)  = PrimBinOp (f tau) op (mapTy f left) (mapTy f right)
+    mapTy f (IfThenElse tau cond thn els)  = IfThenElse (f tau) (mapTy f cond) (mapTy f thn) (mapTy f els)
+    mapTy f (IntLit tau n)                 = IntLit (f tau) n
+    mapTy f (BoolLit tau b)                = BoolLit (f tau) b
+    mapTy f (UnaryMinus tau expr)          = UnaryMinus (f tau) (mapTy f expr)
                                    
 data VarBind  = Mono Ty
               | Poly Ty

@@ -16,7 +16,7 @@ test = do Right prog@(Program decls defs) <- parseFile "lorentey-c++-tmp.hs"
           let (ids', ids'') = split2 ids
               ctx = mkCtx ids'
               Right (ctx', tdefs) = inferDefs ids'' ctx defs
-              tprog = TProgram decls tdefs
+              tprog = Program decls tdefs
           print ctx'
           print tprog
           let mpl = compile tprog

@@ -59,51 +59,34 @@ data PrimitiveOp  = OpAdd
                   | OpGt
                   deriving Show                           
                            
-data Expr  = Var VarName
-           | Con ConName
-           | App Expr Expr
-           | Lam [Pat] Expr
-           | Let [Def] Expr
-           | PrimBinOp PrimitiveOp Expr Expr
-           | IfThenElse Expr Expr Expr
-           | IntLit Int
-           | BoolLit Bool
-           | UnaryMinus Expr
-           deriving Show
+data Expr  tag = Var tag VarName
+               | Con tag ConName
+               | App tag (Expr tag) (Expr tag)
+               | Lam tag [Pat tag] (Expr tag)
+               | Let tag [Def tag] (Expr tag)
+               | PrimBinOp tag PrimitiveOp (Expr tag) (Expr tag)
+               | IfThenElse tag (Expr tag) (Expr tag) (Expr tag)
+               | IntLit tag Int
+               | BoolLit tag Bool
+               | UnaryMinus tag (Expr tag)
+               deriving Show
 
--- Typed expression (result of type inference)
-data TExpr = TVar Ty VarName
-           | TCon Ty ConName
-           | TApp Ty TExpr TExpr
-           | TLam Ty [TPat] TExpr
-           | TLet Ty [TDef] TExpr
-           | TPrimBinOp Ty PrimitiveOp TExpr TExpr
-           | TIfThenElse Ty TExpr TExpr TExpr
-           | TIntLit Int
-           | TBoolLit Bool
-           | TUnaryMinus TExpr
-           deriving Show
+type TExpr = Expr Ty                        
                       
-data Pat  = PVar VarName
-          | PApp ConName [Pat]
-          | Wildcard
-          | IntPat Int
-          | BoolPat Bool
-          deriving Show
+data Pat tag = PVar tag VarName
+             | PApp tag ConName [Pat tag]
+             | Wildcard tag
+             | IntPat tag Int
+             | BoolPat tag Bool
+             deriving Show
 
--- Typed pattern
-data TPat = TPVar Ty VarName
-          | TPApp Ty ConName [TPat]
-          | TWildcard Ty
-          | TIntPat Int
-          | TBoolPat Bool
-          deriving Show
+type TPat = Pat Ty
                      
-data DefEq = DefEq [Pat] Expr deriving Show
-data Def = Def VarName (Maybe Ty) [DefEq] deriving Show
+data Def tag = Def tag VarName (Maybe Ty) [DefEq tag] deriving Show
+data DefEq tag = DefEq tag [Pat tag] (Expr tag) deriving Show
 
-data TDefEq = TDefEq Ty [TPat] TExpr deriving Show
-data TDef = TDef Ty VarName (Maybe Ty) [TDefEq] deriving Show         
+type TDef = Def Ty
+type TDefEq = DefEq Ty
          
-data Program = Program [TypeDecl] [Def] deriving Show
-data TProgram = TProgram [TypeDecl] [TDef] deriving Show
+data Program tag = Program [TypeDecl] [Def tag] deriving Show
+type TProgram = Program Ty

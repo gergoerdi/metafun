@@ -8,9 +8,9 @@ import qualified Language.CxxMPL.Syntax as MPL
 import Control.Monad.State    
 
 compileDef :: Kiff.TDef -> [MPL.MetaDef]
-compileDef (Kiff.TDef tau name _ eqs) = map (compileDefEq name) eqs
+compileDef (Kiff.Def tau name _ eqs) = map (compileDefEq name) eqs
 
-compileDefEq name (Kiff.TDefEq tau pats expr) =
+compileDefEq name (Kiff.DefEq tau pats expr) =
     MPL.MetaDef { MPL.mdefName = name,
                   MPL.mdefFormals = formals,
                   MPL.mdefSpec = specs',
@@ -39,7 +39,7 @@ compileDataCon (Kiff.DataCon name tys) = MPL.MetaDecl name (map compileMetaTy ty
 
                                             
 compile :: Kiff.TProgram -> MPL.Program
-compile (Kiff.TProgram typedecls tdefs) = MPL.Program metadecls metadefs
+compile (Kiff.Program typedecls tdefs) = MPL.Program metadecls metadefs
     where metadecls = mtydecls ++ mvardecls
           metadefs = concatMap compileDef tdefs
                      
@@ -49,34 +49,34 @@ compile (Kiff.TProgram typedecls tdefs) = MPL.Program metadecls metadefs
                     cons = Kiff.DataCon "cons" [Kiff.TyVar (Kiff.TvName "a"), Kiff.TyList $ Kiff.TyVar (Kiff.TvName "a")]
 
           mvardecls = map mvardecl tdefs
-          mvardecl (Kiff.TDef tau name _ _) = MPL.MetaDecl name (map compileMetaTy tys)
+          mvardecl (Kiff.Def tau name _ _) = MPL.MetaDecl name (map compileMetaTy tys)
               where tys = init $ uncurryTy tau
 
 uncurryApp :: Kiff.TExpr -> [Kiff.TExpr]
-uncurryApp (Kiff.TApp _ f x)  = (uncurryApp f) ++ [x]
+uncurryApp (Kiff.App _ f x)  = (uncurryApp f) ++ [x]
 uncurryApp expr               = [expr]
                               
 compileExpr :: Kiff.TExpr -> MPL.Expr
-compileExpr (Kiff.TVar tau var) = MPL.FormalRef var -- error $ unwords ["TVar", var]
-compileExpr (Kiff.TCon tau con) = MPL.Cons con [] -- error $ unwords ["TCon", con]
-compileExpr e@(Kiff.TApp tau f x) = mpl $ map compileExpr args
+compileExpr (Kiff.Var tau var) = MPL.FormalRef var -- error $ unwords ["TVar", var]
+compileExpr (Kiff.Con tau con) = MPL.Cons con [] -- error $ unwords ["TCon", con]
+compileExpr e@(Kiff.App tau f x) = mpl $ map compileExpr args
     where (fun:args) = uncurryApp e
           mpl = case fun of
-                  Kiff.TVar _ var -> MPL.Typename . MPL.Call var
-                  Kiff.TCon _ con -> MPL.Cons con
-compileExpr (Kiff.TLam tau pats body) = error "Lambdas not supported"
-compileExpr (Kiff.TLet tau defs body) = undefined
-compileExpr (Kiff.TPrimBinOp tau op left right) = box (convertTy tau) $ MPL.PrimBinOp op' left' right'
+                  Kiff.Var _ var -> MPL.Typename . MPL.Call var
+                  Kiff.Con _ con -> MPL.Cons con
+compileExpr (Kiff.Lam tau pats body) = error "Lambdas not supported"
+compileExpr (Kiff.Let tau defs body) = undefined
+compileExpr (Kiff.PrimBinOp tau op left right) = box (convertTy tau) $ MPL.PrimBinOp op' left' right'
     where tLeft = getTy left
           tRight = getTy right
           tRes = tau
           op' = compileOp op
           left' = unbox (convertTy tLeft) $ compileExpr left
           right' = unbox (convertTy tRight) $ compileExpr right
-compileExpr (Kiff.TIfThenElse tau cond thn els) = undefined
-compileExpr (Kiff.TIntLit n) = box MPL.TyInt $ MPL.IntLit n
-compileExpr (Kiff.TBoolLit b) = box MPL.TyBool $ MPL.BoolLit b
-compileExpr (Kiff.TUnaryMinus e) = box MPL.TyInt $ MPL.UnaryMinus e'
+compileExpr (Kiff.IfThenElse tau cond thn els) = undefined
+compileExpr (Kiff.IntLit _ n) = box MPL.TyInt $ MPL.IntLit n
+compileExpr (Kiff.BoolLit _ b) = box MPL.TyBool $ MPL.BoolLit b
+compileExpr (Kiff.UnaryMinus _ e) = box MPL.TyInt $ MPL.UnaryMinus e'
     where e' = unbox MPL.TyInt $ compileExpr e
 
 box t e = MPL.Box t e
@@ -113,16 +113,16 @@ newMetaVarName = do st <- get
                     return $ "_p" ++ (show mvnum)
 
 varsAndSpecM :: Kiff.TPat -> DE ([MPL.MetaVarDecl], MPL.MetaSpecialization)
-varsAndSpecM (Kiff.TPVar tau var)       = return ([MPL.MetaVarDecl var mty], MPL.MetaVar var)
+varsAndSpecM (Kiff.PVar tau var)       = return ([MPL.MetaVarDecl var mty], MPL.MetaVar var)
     where mty = compileMetaTy tau
-varsAndSpecM (Kiff.TPApp tau con pats)  = do
+varsAndSpecM (Kiff.PApp tau con pats)  = do
   (mdecls, mspecs) <- liftM unzip $ mapM varsAndSpecM pats
   return (concat mdecls, MPL.MetaCall con mspecs)  
-varsAndSpecM (Kiff.TWildcard tau)       = do
+varsAndSpecM (Kiff.Wildcard tau)       = do
   mv <- newMetaVarName
-  varsAndSpecM (Kiff.TPVar tau mv)
-varsAndSpecM (Kiff.TIntPat n)         = return ([], MPL.MetaIntLit n)
-varsAndSpecM (Kiff.TBoolPat b)        = return ([], MPL.MetaBoolLit b)
+  varsAndSpecM (Kiff.PVar tau mv)
+varsAndSpecM (Kiff.IntPat _ n)         = return ([], MPL.MetaIntLit n)
+varsAndSpecM (Kiff.BoolPat _ b)        = return ([], MPL.MetaBoolLit b)
 
 varsAndSpec :: Kiff.TPat -> ([MPL.MetaVarDecl], MPL.MetaSpecialization)
 varsAndSpec pat = evalState (varsAndSpecM pat) mkDefEqSt
