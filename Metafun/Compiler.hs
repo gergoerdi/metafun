@@ -2,12 +2,15 @@ module Metafun.Compiler where
 
 import qualified Language.Kiff.Syntax as Kiff
 import Language.Kiff.Typing
-
+import qualified Language.Kiff.Typing.Substitution as Subst
+    
 import qualified Language.CxxMPL.Syntax as MPL
 
-import Control.Monad.State    
-
-concatMapM f xs = liftM concat (mapM f xs)
+import Metafun.Compiler.State
+import Control.Monad
+import Data.List
+    
+import Debug.Trace
     
 compileDef :: Kiff.TDef -> Compile [MPL.MetaDef]
 compileDef (Kiff.Def tau name _ eqs) = mapM (compileDefEq name) eqs
@@ -34,9 +37,38 @@ compileTy _ = return $ MPL.TyClass
 
 convertTy (Kiff.TyPrimitive Kiff.TyInt)  = MPL.TyInt
 convertTy (Kiff.TyPrimitive Kiff.TyBool) = MPL.TyBool
-                                            
+
+specializeConName :: Kiff.ConName -> [Kiff.Ty] -> Kiff.ConName                                           
+specializeConName name specs = concat $ intersperse "_" $ name:(map tag specs)
+    where tag (Kiff.TyPrimitive Kiff.TyInt)  = "Int"
+          tag (Kiff.TyPrimitive Kiff.TyBool) = "Bool"
+          tag _                              = "_"
+
 compileTypeDecl :: Kiff.TypeDecl -> Compile [MPL.MetaDecl]
-compileTypeDecl (Kiff.DataDecl name tvs cons) = mapM compileDataCon cons
+compileTypeDecl (Kiff.DataDecl name tvnames cons) = do
+  mapM compileDataCon $ concatMap specialize cons
+    where tvs = map Kiff.TvName tvnames
+          specialize con@(Kiff.DataCon name tys) = map specializeAs spectys
+              where specializeAs specs = Kiff.DataCon name' tys'
+                        where name' = specializeConName name $ zipWith helper specs tvs
+                                  where helper (Just ty) _  = ty
+                                        helper Nothing   tv = Kiff.TyVar tv
+                                              
+                              subst = foldl step Subst.empty $ zip specs tvs
+                              step s (Nothing, _)    = s
+                              step s ((Just ty), tv) = Subst.add s tv ty
+
+                              tys' = map (Subst.xform subst) tys
+                                      
+          spectysOf tv = [Nothing, Just $ Kiff.TyPrimitive Kiff.TyInt, Just $ Kiff.TyPrimitive Kiff.TyBool]
+              where ty = Kiff.TyVar tv
+          spectys = combinations $ map spectysOf tvs
+                    
+combinations :: [[a]] -> [[a]]
+combinations []          = [[]]
+combinations ([]:_)      = []
+combinations ((x:xs):ys) = (map (x:) (combinations ys)) ++ (combinations (xs:ys))
+                           
 
 compileDataCon :: Kiff.DataCon -> Compile MPL.MetaDecl
 compileDataCon (Kiff.DataCon name tys) = do
@@ -60,18 +92,25 @@ compile (Kiff.Program typedecls defs) = do
 
 uncurryApp :: Kiff.TExpr -> [Kiff.TExpr]
 uncurryApp (Kiff.App _ f x) = (uncurryApp f) ++ [x]
-uncurryApp expr             = [expr]
+uncurryApp expr             = [expr]                              
+
+callCon :: Kiff.ConName -> Kiff.Ty -> Kiff.ConName
+callCon con tau = specializeConName con args
+    where args = case t of
+                   Kiff.TyList tElem -> [tElem]
+                   _ -> tail $ uncurryTyApp t
+          t = last $ uncurryTy tau
                               
 compileExpr :: Kiff.TExpr -> Compile MPL.Expr
-compileExpr (Kiff.Var tau var) =return $ MPL.FormalRef var -- error $ unwords ["TVar", var]
-compileExpr (Kiff.Con tau con) = return $ MPL.Cons con [] -- error $ unwords ["TCon", con]
+compileExpr (Kiff.Var tau var) = return $ MPL.FormalRef var
+compileExpr (Kiff.Con tau con) = return $ MPL.Cons (callCon con tau) []
 compileExpr e@(Kiff.App tau f x) = do
   let (fun:args) = uncurryApp e
       mpl = case fun of
               Kiff.Var _ var -> case tau of
                                   Kiff.TyPrimitive _  -> MPL.Call var
                                   _                   -> MPL.Typename . MPL.Call var
-              Kiff.Con _ con -> MPL.Cons con
+              Kiff.Con tau con -> MPL.Cons (callCon con tau)
   args' <- mapM compileExpr args
   return $ mpl args'
 compileExpr (Kiff.Lam tau pats body) = error "Lambdas not supported"
@@ -109,26 +148,14 @@ compileOp Kiff.OpEq  = MPL.OpEq
 compileOp Kiff.OpAnd = MPL.OpAnd
 compileOp Kiff.OpOr  = MPL.OpOr
 
-data CompilerState = CSt { unique :: Int }
-type Compile a = State CompilerState a
-                       
-mkCompilerState = CSt { unique = 0 }    
-    
-newMetaVarName :: Compile MPL.MetaVarName
-newMetaVarName = do st <- get
-                    let u = unique st
-                        u' = u + 1
-                        st' = st{unique = u'}
-                    put st'
-                    return $ "_p" ++ (show u)
-
 varsAndSpec :: Kiff.TPat -> Compile ([MPL.MetaVarDecl], MPL.MetaSpecialization)
 varsAndSpec (Kiff.PVar tau var)       = do
   mty <- compileMetaTy tau
   return ([MPL.MetaVarDecl var mty], MPL.MetaVar var)
 varsAndSpec (Kiff.PApp tau con pats)  = do
   (mdecls, mspecs) <- liftM unzip $ mapM varsAndSpec pats
-  return (concat mdecls, MPL.MetaCall con mspecs)  
+  return (concat mdecls, MPL.MetaCall con' mspecs)
+      where con' = callCon con tau
 varsAndSpec (Kiff.Wildcard tau)       = do
   mv <- newMetaVarName
   varsAndSpec (Kiff.PVar tau mv)
@@ -137,3 +164,6 @@ varsAndSpec (Kiff.BoolPat _ b)        = return ([], MPL.MetaBoolLit b)
 
 uncurryTy (Kiff.TyFun t t')  = (t:uncurryTy t')
 uncurryTy t                  = [t]
+
+uncurryTyApp (Kiff.TyApp t t') = (uncurryTyApp t) ++ [t']
+uncurryTyApp t                 = [t]

@@ -1,14 +1,16 @@
 module Metafun where
 
 import Metafun.Compiler
+import Metafun.Compiler.State
+import Control.Monad.State
+
 import Language.Kiff.Syntax
 import Language.Kiff.Parser
 import Language.Kiff.Typing
 import Language.Kiff.Typing.Infer
-import Data.Supply    
 import Language.CxxMPL.Unparser
 
-import Control.Monad.State    
+import Data.Supply    
     
 mkIds :: IO (Supply TvId)
 mkIds = newEnumSupply
