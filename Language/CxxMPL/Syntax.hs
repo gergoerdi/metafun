@@ -12,7 +12,8 @@ data MetaTy  =  MetaInt
 
 data Ty = TyInt
         | TyBool
-        deriving Show
+        | TyClass
+        deriving (Show, Eq)
                       
 data MetaDecl = MetaDecl MetaVarName [MetaTy] deriving Show
 
@@ -20,7 +21,7 @@ data TypedExpr = TypedExpr Ty Expr
               
 data MetaDef = MetaDef { mdefName :: MetaVarName,
                          mdefFormals :: [MetaVarDecl],
-                         mdefSpec :: [MetaSpecialization],
+                         mdefSpec :: Maybe [MetaSpecialization],
                          mdefFields :: [Field],
                          mdefBody :: (Ty, Expr) } deriving Show
 
@@ -33,7 +34,8 @@ data MetaExpr  = MetaVar MetaVarName
                | MetaIntLit Int
                | MetaCall MetaVarName [MetaExpr] deriving Show
 
-data Expr  = PrimBinOp PrimitiveOp Expr Expr
+data Expr  = Typename Expr
+           | PrimBinOp PrimitiveOp Expr Expr
            | Call MetaVarName [Expr]
            | Cons MetaVarName [Expr]
            | FormalRef MetaVarName
@@ -41,6 +43,8 @@ data Expr  = PrimBinOp PrimitiveOp Expr Expr
            | BoolLit Bool
            | IntLit Int
            | UnaryMinus Expr
+           | Box Ty Expr
+           | Unbox Ty Expr
            deriving Show
 
 data PrimitiveOp  = OpAdd

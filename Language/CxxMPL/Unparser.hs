@@ -18,12 +18,14 @@ struct name = text "struct" <+> varname name
 varname name = text name
               
 field :: String -> Ty -> Expr -> Doc
-field name ty expr = hsep [text "static const",
-                           unparse ty,
-                           varname name,
-                           equals,
-                           unparse expr,
-                           semi]
+field name TyClass expr = hsep [text "typedef",
+                                unparse expr,
+                                varname name] <> semi
+field name ty      expr = hsep [text "static const",
+                                unparse ty,
+                                varname name,
+                                equals,
+                                unparse expr] <> semi
 
 template :: Bool -> [Doc] -> Doc
 template  False  []    = empty
@@ -53,7 +55,9 @@ instance (Unparse Field) where
 
 instance (Unparse MetaDef) where                                      
     unparse mdef = vcat [template True formals,
-                         struct name <> anglelist (map unparse spec),
+                         struct name <> case spec of
+                                          Nothing -> empty
+                                          Just ms -> anglelist (map unparse ms),
                          lbrace,
                          nest 2 $ vcat (map unparse fields) $+$ field "v" ty body,
                          rbrace] <> semi
@@ -68,8 +72,13 @@ instance (Unparse MetaExpr) where
     unparse (MetaBoolLit b)    = bool b
     unparse (MetaIntLit i)     = int i
     unparse (MetaCall var es)  = text var <> anglelist (map unparse es)
-
+                                 
 instance (Unparse Expr) where                                 
+    unparse (Typename expr)            = text "typename" <+> unparse expr
+    unparse (Box TyInt expr)           = unparse $ Cons "BoxedInt" [expr]
+    unparse (Box TyBool expr)          = unparse $ Cons "BoxedBool" [expr]
+    unparse (Unbox TyInt expr)         = unparse $ Call "unboxInt" [expr]
+    unparse (Unbox TyBool expr)        = unparse $ Call "unboxBool" [expr]
     unparse (FormalRef v)              = varname v
     unparse (VarRef v)                 = varname v
     unparse (Cons cons args)           = varname cons <> anglelist (map unparse args)
@@ -99,10 +108,10 @@ testDef = MetaDef { mdefName = "search_i",
                                    MetaVarDecl "final" MetaBool,
                                    MetaVarDecl "digit" MetaInt,
                                    MetaVarDecl "rest" (MetaClass [])],
-                    mdefSpec = [MetaVar "length",
-                                MetaVar "good",
-                                MetaVar "final",
-                                MetaCall "Cons" [MetaVar "digit", MetaVar "rest"]],
+                    mdefSpec = Just [MetaVar "length",
+                                     MetaVar "good",
+                                     MetaVar "final",
+                                     MetaCall "Cons" [MetaVar "digit", MetaVar "rest"]],
                     mdefFields = [],
                     mdefBody = (TyInt, Call "search" [FormalRef "length", Cons "Cons" [PrimBinOp OpAdd (FormalRef "digit") (IntLit 1), FormalRef "rest"]])
                   }
@@ -113,7 +122,7 @@ testDecl' = MetaDecl "divisor_test" [MetaClass []]
 testDef' = MetaDef { mdefName = "divisor_test",
                      mdefFormals = [MetaVarDecl "first" MetaInt,
                                     MetaVarDecl "rest" (MetaClass [])],
-                     mdefSpec = [MetaCall "Cons" [MetaVar "first", MetaVar "rest"]],
+                     mdefSpec = Just [MetaCall "Cons" [MetaVar "first", MetaVar "rest"]],
                      mdefFields = [Field "num" (TyInt, Call "value" [Cons "Cons" [FormalRef "first", FormalRef "rest"]]),
                                    Field "div" (TyInt, Call "length" [Cons "Cons" [FormalRef "first", FormalRef "rest"]]),
                                    Field "mod" (TyInt, PrimBinOp OpMod (VarRef "num") (VarRef "div"))],

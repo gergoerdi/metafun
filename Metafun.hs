@@ -3,6 +3,7 @@ module Metafun where
 import Metafun.Compiler
 import Language.Kiff.Syntax
 import Language.Kiff.Parser
+import Language.Kiff.Typing
 import Language.Kiff.Typing.Infer
 import Data.Supply    
 import Language.CxxMPL.Unparser
@@ -17,5 +18,6 @@ test = do Right prog@(Program decls defs) <- parseFile "lorentey-c++-tmp.hs"
               Right (ctx', tdefs) = inferDefs ids'' ctx defs
               tprog = TProgram decls tdefs
           print ctx'
+          print tprog
           let mpl = compile tprog
           print $ unparse mpl

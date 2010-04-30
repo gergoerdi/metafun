@@ -8,18 +8,24 @@ data TyPrimitive  = TyInt
                   | TyBool
                   deriving (Eq, Show)
 
-data Ty  = TyVar TvName
-         | TyVarId TvId
+data Tv  = TvName TvName
+         | TvId TvId
+           deriving (Eq, Ord)
+
+instance Show Tv where
+    show (TvName v) = v
+    show (TvId x) = "t" ++ (show x)
+                    
+data Ty  = TyVar Tv
          | TyFun Ty Ty
          | TyApp Ty Ty
          | TyData DataName
          | TyList Ty
-         | TyPrimitive TyPrimitive
-
+         | TyPrimitive TyPrimitive           
+           
 instance Show Ty where
     show ty = show' False ty
-        where show' p (TyVar v) = v
-              show' p (TyVarId x) = "t" ++ (show x)
+        where show' p (TyVar v) = show v
               show' p (TyFun t t') = parenIf p $ unwords [show' True t, "->", show' False t']
               show' p (TyList t) = "[" ++ (show' False t) ++ "]"
               show' p (TyApp t t') = unwords [show' True t, show' False t']

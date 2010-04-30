@@ -1,65 +1,48 @@
 module Language.Kiff.Typing.Instantiate (instantiate) where
 
 import Language.Kiff.Syntax
+import Language.Kiff.Typing
 
 import qualified Data.Map as Map
 import Data.Supply
 import Control.Monad.State
 
-data St = St { idmap :: Map.Map TvId TvId,
-               varmap :: Map.Map TvName TvId,
+data St = St { tvmap :: Map.Map Tv Tv,
+               ctx :: Ctx,
                ids :: Supply TvId}        
 
-mkSt :: Supply TvId -> St
-mkSt ids = St { idmap = Map.empty,
-                varmap = Map.empty,
-                ids = ids }
+mkSt :: Supply TvId -> Ctx -> St
+mkSt ids ctx = St { tvmap = Map.empty,
+                    ctx = ctx,
+                    ids = ids }
 
 type Inst a = State St a
 
-mkId :: Inst TvId
+mkId :: Inst Tv
 mkId = do st@St{ids = ids} <- get
           let (ids', ids'') = split2 ids
           put st{ids = ids'}
-          return $ supplyValue ids''
+          return $ TvId $ supplyValue ids''
 
-getVar :: TvName -> Inst (Maybe TvId)
-getVar v = do varmap <- liftM varmap get
-              return $ Map.lookup v varmap
+getTv :: Tv -> Inst (Maybe Tv)
+getTv v = do tvmap <- liftM tvmap get
+             return $ Map.lookup v tvmap
 
-addVar :: TvName -> Inst TvId
-addVar v = do st@St{ varmap = varmap, ids = ids} <- get
+instTv :: Tv -> Inst Tv
+instTv v = do st@St{ tvmap = tvmap, ids = ids} <- get
               id' <- mkId
-              put st{varmap = Map.insert v id' varmap}
+              put st{tvmap = Map.insert v id' tvmap}
               return id'
 
-ensureVar :: TvName -> Inst TvId
-ensureVar v = do lookup <- getVar v
-                 case lookup of
-                   Just id' -> return id'
-                   Nothing -> addVar v
+ensureTv :: Tv -> Inst Tv
+ensureTv v = do lookup <- getTv v
+                case lookup of
+                  Just v' -> return v'
+                  Nothing -> instTv v
 
 
-getId :: TvId -> Inst (Maybe TvId)
-getId id = do idmap <- liftM idmap get
-              return $ Map.lookup id idmap
-                     
-addId :: TvId -> Inst TvId
-addId id = do st@St{ idmap = idmap, ids = ids} <- get
-              id' <- mkId              
-              put st{idmap = Map.insert id' id idmap}
-              return id'
-
-ensureId :: TvId -> Inst TvId
-ensureId id = do lookup <- getId id
-                 case lookup of
-                   Just id' -> return id'
-                   Nothing -> addId id
-
-                              
 instantiateM :: Ty -> Inst Ty
-instantiateM (TyVar v)     = liftM TyVarId $ ensureVar v
-instantiateM (TyVarId id)  = liftM TyVarId $ ensureId id
+instantiateM (TyVar v)     = liftM TyVar $ ensureTv v
 instantiateM (TyFun t u)   = do t' <- instantiateM t
                                 u' <- instantiateM u
                                 return $ TyFun t' u'
@@ -70,5 +53,5 @@ instantiateM (TyList t)    = do t' <- instantiateM t
                                 return $ TyList t'
 instantiateM ty            = return ty
            
-instantiate :: Supply TvId -> Ty -> Ty
-instantiate ids ty = evalState (instantiateM ty) (mkSt ids)
+instantiate :: Supply TvId -> Ctx -> Ty -> Ty
+instantiate ids ctx ty = evalState (instantiateM ty) (mkSt ids ctx)

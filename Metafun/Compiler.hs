@@ -1,7 +1,7 @@
 module Metafun.Compiler where
 
 import qualified Language.Kiff.Syntax as Kiff
-import Language.Kiff.Typing.Infer
+import Language.Kiff.Typing
 
 import qualified Language.CxxMPL.Syntax as MPL
 
@@ -13,24 +13,40 @@ compileDef (Kiff.TDef tau name _ eqs) = map (compileDefEq name) eqs
 compileDefEq name (Kiff.TDefEq tau pats expr) =
     MPL.MetaDef { MPL.mdefName = name,
                   MPL.mdefFormals = formals,
-                  MPL.mdefSpec = specs,
+                  MPL.mdefSpec = specs',
                   MPL.mdefFields = [],
                   MPL.mdefBody = (compileTy tyRet, compileExpr expr) }
         where tyRet = last $ uncurryTy tau
               (formalss, specs) = unzip $ map varsAndSpec pats
+              specs' = if (all isVar specs) then Nothing else Just specs
+                  where isVar (MPL.MetaVar _) = True
+                        isVar _               = False
               formals = concat formalss
     
-compileTy (Kiff.TyPrimitive Kiff.TyInt)   = MPL.TyInt
-compileTy (Kiff.TyPrimitive Kiff.TyBool)  = MPL.TyBool
+-- compileTy (Kiff.TyPrimitive Kiff.TyInt)   = MPL.TyInt
+-- compileTy (Kiff.TyPrimitive Kiff.TyBool)  = MPL.TyBool
+
+compileTy _ = MPL.TyClass
+
+convertTy (Kiff.TyPrimitive Kiff.TyInt) = MPL.TyInt
+convertTy (Kiff.TyPrimitive Kiff.TyBool) = MPL.TyBool
+                                            
+compileTypeDecl :: Kiff.TypeDecl -> [MPL.MetaDecl]
+compileTypeDecl (Kiff.DataDecl name tvs cons) = map compileDataCon cons
+
+compileDataCon :: Kiff.DataCon -> MPL.MetaDecl
+compileDataCon (Kiff.DataCon name tys) = MPL.MetaDecl name (map compileMetaTy tys)
+
                                             
 compile :: Kiff.TProgram -> MPL.Program
 compile (Kiff.TProgram typedecls tdefs) = MPL.Program metadecls metadefs
     where metadecls = mtydecls ++ mvardecls
           metadefs = concatMap compileDef tdefs
                      
-          mtydecls = concatMap mtydecl typedecls
-          mtydecl (Kiff.DataDecl name tvs cons) = map mtycon cons
-          mtycon (Kiff.DataCon name tys) = MPL.MetaDecl name (map compileMetaTy tys)
+          mtydecls = concatMap compileTypeDecl (listdecl:typedecls)
+              where listdecl = Kiff.DataDecl "list" ["a"] [nil,cons]
+                    nil = Kiff.DataCon "nil" []
+                    cons = Kiff.DataCon "cons" [Kiff.TyVar (Kiff.TvName "a"), Kiff.TyList $ Kiff.TyVar (Kiff.TvName "a")]
 
           mvardecls = map mvardecl tdefs
           mvardecl (Kiff.TDef tau name _ _) = MPL.MetaDecl name (map compileMetaTy tys)
@@ -46,22 +62,32 @@ compileExpr (Kiff.TCon tau con) = MPL.Cons con [] -- error $ unwords ["TCon", co
 compileExpr e@(Kiff.TApp tau f x) = mpl $ map compileExpr args
     where (fun:args) = uncurryApp e
           mpl = case fun of
-                  Kiff.TVar _ var -> MPL.Call var
+                  Kiff.TVar _ var -> MPL.Typename . MPL.Call var
                   Kiff.TCon _ con -> MPL.Cons con
-compileExpr (Kiff.TLam tau pats body) = undefined
+compileExpr (Kiff.TLam tau pats body) = error "Lambdas not supported"
 compileExpr (Kiff.TLet tau defs body) = undefined
-compileExpr (Kiff.TPrimBinOp tau op left right) = MPL.PrimBinOp op' left' right'
-    where op' = compileOp op
-          left' = compileExpr left
-          right' = compileExpr right
+compileExpr (Kiff.TPrimBinOp tau op left right) = box (convertTy tau) $ MPL.PrimBinOp op' left' right'
+    where tLeft = getTy left
+          tRight = getTy right
+          tRes = tau
+          op' = compileOp op
+          left' = unbox (convertTy tLeft) $ compileExpr left
+          right' = unbox (convertTy tRight) $ compileExpr right
 compileExpr (Kiff.TIfThenElse tau cond thn els) = undefined
-compileExpr (Kiff.TIntLit n) = MPL.IntLit n
-compileExpr (Kiff.TBoolLit b) = MPL.BoolLit b
-compileExpr (Kiff.TUnaryMinus e) = MPL.UnaryMinus (compileExpr e)
-                              
-compileMetaTy (Kiff.TyPrimitive Kiff.TyInt)   = MPL.MetaInt
-compileMetaTy (Kiff.TyPrimitive Kiff.TyBool)  = MPL.MetaBool
-compileMetaTy _                               = MPL.MetaTypename -- TODO
+compileExpr (Kiff.TIntLit n) = box MPL.TyInt $ MPL.IntLit n
+compileExpr (Kiff.TBoolLit b) = box MPL.TyBool $ MPL.BoolLit b
+compileExpr (Kiff.TUnaryMinus e) = box MPL.TyInt $ MPL.UnaryMinus e'
+    where e' = unbox MPL.TyInt $ compileExpr e
+
+box t e = MPL.Box t e
+unbox t (MPL.Box t' e) | t == t'   = e
+                       | otherwise = error "Internal error: incompatible boxing/unboxing"
+unbox t e = MPL.Unbox t e
+               
+-- compileMetaTy (Kiff.TyPrimitive Kiff.TyInt)   = MPL.MetaInt
+-- compileMetaTy (Kiff.TyPrimitive Kiff.TyBool)  = MPL.MetaBool
+compileMetaTy tau@(Kiff.TyFun x y)              = MPL.MetaClass $ map compileMetaTy $ init $ uncurryTy tau
+compileMetaTy _                               = MPL.MetaClass [] -- TODO
 
 compileOp :: Kiff.PrimitiveOp -> MPL.PrimitiveOp -- TODO: use the same def in both languages
 compileOp Kiff.OpAdd = MPL.OpAdd

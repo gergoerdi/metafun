@@ -1,6 +1,7 @@
 module Language.Kiff.Typing.Infer where
 
 import Language.Kiff.Syntax
+import Language.Kiff.Typing
 import Language.Kiff.Typing.Substitution
 import Language.Kiff.Typing.Unify
 import Language.Kiff.Typing.Instantiate
@@ -12,100 +13,11 @@ import qualified Data.Map as Map
 import Data.Supply
 import Data.Either
 
-class Typed a where
-    getTy :: a -> Ty
-    mapTy :: (Ty -> Ty) -> a -> a
-
-instance Typed TDef where
-    getTy (TDef tau name decl tdefeqs) = tau
-    mapTy f (TDef tau name decl tdefeqs) = TDef tau' name decl tdefeqs'
-        where tau' = f tau
-              tdefeqs' = map (mapTy f) tdefeqs
-
-instance Typed TDefEq where
-    getTy (TDefEq tau tpats tbody) = tau
-    mapTy f (TDefEq tau tpats tbody) = TDefEq tau' tpats' tbody'
-        where tau' = f tau
-              tpats' = map (mapTy f) tpats
-              tbody' = mapTy f tbody
-
-instance Typed TPat where
-    getTy (TPVar tau _)    = tau
-    getTy (TPApp tau _ _)  = tau
-    getTy (TWildcard tau)  = tau
-    getTy (TIntPat _)    = TyPrimitive TyInt
-    getTy (TBoolPat _)   = TyPrimitive TyBool
-
-    mapTy f (TPVar tau var)        = TPVar (f tau) var
-    mapTy f (TPApp tau con tpats)  = TPApp (f tau) con (map (mapTy f) tpats)
-    mapTy f (TWildcard tau)        = TWildcard (f tau)
-    mapTy f (TIntPat n)          = TIntPat n
-    mapTy f (TBoolPat b)         = TBoolPat b
-
-instance Typed TExpr where
-    getTy (TVar tau _)             = tau
-    getTy (TCon tau _)             = tau
-    getTy (TApp tau _ _)           = tau
-    getTy (TLam tau _ _)           = tau
-    getTy (TLet tau _ _)           = tau
-    getTy (TPrimBinOp tau _ _ _)   = tau
-    getTy (TIfThenElse tau _ _ _)  = tau
-    getTy (TIntLit _)            = TyPrimitive TyInt
-    getTy (TBoolLit _)           = TyPrimitive TyBool
-    getTy (TUnaryMinus _)        = TyPrimitive TyInt
-                                   
-    mapTy f (TVar tau var)                  = TVar (f tau) var
-    mapTy f (TCon tau con)                  = TCon (f tau) con
-    mapTy f (TApp tau fun x)                = TApp (f tau) (mapTy f fun) (mapTy f x)
-    mapTy f (TLam tau pats body)            = TLam (f tau) (map (mapTy f) pats) (mapTy f body)
-    mapTy f (TLet tau defs body)            = TLet (f tau) (map (mapTy f) defs) (mapTy f body)
-    mapTy f (TPrimBinOp tau op left right)  = TPrimBinOp (f tau) op (mapTy f left) (mapTy f right)
-    mapTy f (TIfThenElse tau cond thn els)  = TIfThenElse (f tau) (mapTy f cond) (mapTy f thn) (mapTy f els)
-    mapTy f (TIntLit n)                   = TIntLit n
-    mapTy f (TBoolLit b)                  = TBoolLit b
-    mapTy f (TUnaryMinus expr)            = TUnaryMinus (mapTy f expr)
-                                   
-data VarBind  = Mono Ty
-              | Poly Ty
-              deriving Show
-    
-data Ctx = Ctx { conmap :: Map.Map DataName Ty,
-                 varmap :: Map.Map VarName VarBind
-               }
-           deriving Show
-
-lookupVar :: Ctx -> VarName -> Maybe VarBind
-lookupVar ctx v = Map.lookup v (varmap ctx)
-                    
-tyFun :: [Ty] -> Ty
-tyFun = foldr1 TyFun
-
-tyApp :: [Ty] -> Ty
-tyApp = foldr1 TyApp
-         
-mkCtx :: Supply TvId -> Ctx
-mkCtx ids = Ctx { conmap = Map.fromList [("nil", tyList),
-                                         ("cons", tyFun [TyVarId i, tyList, tyList])],
-                  varmap = Map.fromList [("not",  (Poly $ tyFun [TyPrimitive TyBool, TyPrimitive TyBool]))]
-                }
-    where i = supplyValue ids
-          tyList = TyList (TyVarId i)
-
-addVar :: Ctx -> (VarName, VarBind) -> Ctx
-addVar ctx@Ctx{varmap = varmap} (name, bind) = ctx{varmap = varmap'}
-    where varmap' = Map.insert name bind varmap
-                   
-addMonoVar :: Ctx -> (VarName, Ty) -> Ctx
-addMonoVar ctx (name, ty) = addVar ctx (name, (Mono ty))
-
-addPolyVar :: Ctx -> (VarName, Ty) -> Ctx
-addPolyVar ctx (name, ty) = addVar ctx (name, (Poly ty))
-
 inferGroup :: Supply TvId -> Ctx -> [Def] -> Either [UnificationError] [TDef]
 inferGroup ids ctx defs = case unify eqs of
                             Left errs  -> Left errs
-                            Right s    -> foldl step (Right []) $ map (fitDecl . (mapTy $ xform s)) tdefs
-    where (ids', ids'') = split2 ids
+                            Right s    -> foldl step (Right []) $ zipWith (\ ids tdef -> checkDecl ids (mapTy (xform s) tdef)) (split ids''') tdefs
+    where (ids', ids'', ids''') = split3 ids
           (tdefs, eqss) = unzip $ zipWith collect (split ids') defs
           eqs = (zipWith eq newVars tdefs) ++ concat eqss
               where eq (name, tau) tdef = tau :=: getTy tdef
@@ -116,15 +28,15 @@ inferGroup ids ctx defs = case unify eqs of
           newVars :: [(VarName, Ty)]
           newVars = zipWith mkVar (split ids'') defs
               where mkVar ids (Def name _ _) = (name, tau)
-                        where tau = TyVarId $ supplyValue ids
-          ctx' = foldl addMonoVar ctx newVars
+                        where tau = mkTv ids
+          ctx' = foldl addMonoVar ctx newVars          
 
-          fitDecl :: TDef -> Either [UnificationError] TDef
-          fitDecl tdef@(TDef tau name decl tdefeqs) = case decl of
-                                                      Nothing  -> Right tdef
-                                                      Just tau'  -> case checkDecl tau' tau of
-                                                                    Left errs  -> Left errs
-                                                                    Right s    -> Right $ TDef tau' name decl (map (mapTy $ xform s) tdefeqs)
+          checkDecl :: Supply TvId -> TDef -> Either [UnificationError] TDef
+          checkDecl ids tdef@(TDef tau name decl tdefeqs) = case decl of
+                                                            Nothing  -> Right tdef
+                                                            Just tau'  -> case fitDecl tau' tau of
+                                                                          Left errs  -> Left errs
+                                                                          Right s    -> Right $ TDef tau' name (Just tau') (map (mapTy $ xform s) tdefeqs)
 
           step :: Either [UnificationError] [TDef] -> Either [UnificationError] TDef -> Either [UnificationError] [TDef]
           step (Left errs)    (Left errs')  = Left $ errs' ++ errs
@@ -148,7 +60,7 @@ inferDefs ids ctx defs = trace (show $ map (map (\ (Def name _ _) -> name)) defg
 
 collectDef :: Supply TvId -> Ctx -> Def -> (TDef, [TyEq])
 collectDef ids ctx (Def name decl defeqs) = (TDef tau name decl tdefeqs, eqs)
-    where tau = TyVarId $ supplyValue ids
+    where tau = mkTv ids
           (tdefeqs, eqss) = unzip $ zipWith collect (split ids) defeqs
           collect ids defeq = collectDefEq ids ctx defeq
           eqs = (map (\ tdefeq -> (tau :=: (getTy tdefeq))) tdefeqs) ++ (concat eqss)
@@ -163,23 +75,25 @@ collectDefEq ids ctx (DefEq pats body) = (TDefEq tau tpats tbody, peqs ++ beqs)
           pts = map getTy tpats
           bt = getTy tbody                                    
           
-                                   
+mkTv :: Supply TvId -> Ty
+mkTv ids = TyVar $ TvId $ supplyValue ids
+               
 collectExpr :: Supply TvId -> Ctx -> Expr -> (TExpr, [TyEq])
 collectExpr ids ctx (Var var) = case lookupVar ctx var of
                                   Just (Mono tau) -> (TVar tau var, [])
                                   Just (Poly tau) -> (TVar tau' var, [])
-                                      where tau' = instantiate ids tau
+                                      where tau' = instantiate ids ctx tau
                                   Nothing -> error $ unlines [unwords ["Out of scope reference:", var], show ctx]
 collectExpr ids ctx (Con con) = case Map.lookup con (conmap ctx) of
                                   Just tau -> (TCon tau' con, [])
-                                      where tau' = instantiate ids tau
+                                      where tau' = instantiate ids ctx tau
 collectExpr ids ctx (App f x) = (TApp tau tf tx, (ft :=: TyFun xt tau):(feqs ++ xeqs))
     where  (ids', ids'') = split2 ids
            (tf, feqs) = collectExpr ids' ctx f
            (tx, xeqs) = collectExpr ids'' ctx x
            ft = getTy tf
            xt = getTy tx
-           tau = TyVarId $ supplyValue ids              
+           tau = mkTv ids
 collectExpr ids ctx (PrimBinOp op left right) = (TPrimBinOp alpha op tleft tright, (tau :=: tau'):(leqs ++ reqs))
     where  (ids', ids'') = split2 ids
            (tleft, leqs) = collectExpr ids' ctx left
@@ -188,7 +102,7 @@ collectExpr ids ctx (PrimBinOp op left right) = (TPrimBinOp alpha op tleft trigh
            rt = getTy tright
            (t1, t2, t3) = typeOfOp op
            tau = tyFun  [TyPrimitive t1, TyPrimitive t2, TyPrimitive t3]
-           alpha = TyVarId $ supplyValue ids
+           alpha = mkTv ids
            tau' = tyFun [lt, rt, alpha]               
 collectExpr ids ctx (IfThenElse cond thn els) = (TIfThenElse alpha cond' thn' els', eqs++ceqs++teqs++eeqs)
     where  (ids', ids'', ids3) = split3 ids
@@ -196,7 +110,7 @@ collectExpr ids ctx (IfThenElse cond thn els) = (TIfThenElse alpha cond' thn' el
            (cond', ceqs) = collectExpr ids' ctx cond
            (thn', teqs) = collectExpr ids'' ctx thn
            (els', eeqs) = collectExpr ids3 ctx els
-           alpha = TyVarId $ supplyValue ids
+           alpha = mkTv ids
            eqs = [tt :=: alpha, et :=: alpha, ct :=: TyPrimitive TyBool]               
 collectExpr ids ctx (IntLit n) = (TIntLit n, [])
 collectExpr ids ctx (BoolLit b) = (TBoolLit b, [])
@@ -231,18 +145,18 @@ inferPats ids ctx pats = (tpats, ctx', eqs)
                  
 collectPat :: Supply TvId -> Ctx -> Pat -> (TPat, [(VarName, Ty)], [TyEq])
 collectPat ids ctx Wildcard         = (TWildcard tau, [], [])
-    where tau = TyVarId $ supplyValue ids
+    where tau = mkTv ids
 collectPat ids ctx (IntPat n)       = (TIntPat n, [], [])
 collectPat ids ctx (BoolPat b)      = (TBoolPat b, [], [])
 collectPat ids ctx (PVar var)       = (TPVar tau var, [(var, tau)], [])
-    where tau = TyVarId $ supplyValue ids
+    where tau = mkTv ids
 collectPat ids ctx (PApp con pats)  = (TPApp alpha con tpats, binds, (tau :=: tyFun (ts ++ [alpha])):eqs)
     where   (ids', ids'') = split2 ids
             tau = case Map.lookup con (conmap ctx) of
-                  Just t -> instantiate ids' t
+                  Just t -> instantiate ids' ctx t
             (tpats, binds, eqs) = collectPats ids'' ctx pats
             ts = map getTy tpats
-            alpha = TyVarId $ supplyValue ids
+            alpha = mkTv ids
                 
 intOp = (TyInt, TyInt, TyInt)                                                                        
 intRel = (TyInt, TyInt, TyBool)

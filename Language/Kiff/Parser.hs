@@ -55,7 +55,7 @@ ty = do tys <- ty' `sepBy1` (reservedOp "->")
                                  return $ TyList tyElem
 
                      tyVar = do tv <- varname
-                                return $ TyVar tv
+                                return $ TyVar (TvName tv)
 
                      dataTy = do con <- conname
                                  return $ TyData con

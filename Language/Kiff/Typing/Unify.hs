@@ -1,4 +1,4 @@
-module Language.Kiff.Typing.Unify (UnificationError(..), TyEq(..), unify, checkDecl) where
+module Language.Kiff.Typing.Unify (UnificationError(..), TyEq(..), unify, fitDecl) where
 
 import Language.Kiff.Syntax
 import Language.Kiff.Typing.Substitution
@@ -14,22 +14,22 @@ data Unification  = Skip
                   | Incongruent
                   | Flip Unification
                   | OccursFailed
-                  | Substitute TvId Ty
+                  | Substitute Tv Ty
                   | Recurse [TyEq]
 
-occurs :: TvId -> Ty -> Bool
-occurs x (TyVarId y)  = x == y
-occurs x (TyFun t u)  = occurs x t || occurs x u
-occurs x (TyApp t u)  = occurs x t || occurs x u
-occurs x _            = False                         
+occurs :: Tv -> Ty -> Bool
+occurs v (TyVar v')   = v == v'
+occurs v (TyFun t u)  = occurs v t || occurs v u
+occurs v (TyApp t u)  = occurs v t || occurs v u
+occurs v _            = False                         
                     
 unifyEq :: Ty -> Ty -> Unification
 unifyEq (TyPrimitive p)  (TyPrimitive p')               = if p == p' then Skip else Incongruent
 unifyEq (TyData d)       (TyData d')                    = if d == d' then Skip else Incongruent
-unifyEq (TyVarId x)      (TyVarId y)      | x == y      = Skip
-unifyEq (TyVarId x)      t'               | occurs x t' = OccursFailed
-                                          | otherwise   = Substitute x t'
-unifyEq t                (TyVarId y)                    = Flip Incongruent
+unifyEq (TyVar v)        (TyVar v')       | v == v'     = Skip
+unifyEq (TyVar v)        t'               | occurs v t' = OccursFailed
+                                          | otherwise   = Substitute v t'
+unifyEq t                (TyVar v)                      = Flip Incongruent
 unifyEq (TyFun t u)      (TyFun t' u')                  = Recurse [t :=: t', u :=: u']
 unifyEq (TyApp t u)      (TyApp t' u')                  = Recurse [t :=: t', u :=: u']
 unifyEq (TyList t)       (TyList t')                    = Recurse [t :=: t']
@@ -56,5 +56,5 @@ unify' leftOnly  ((t :=: t'):eqs)  = process $ unifyEq t t'
 unify :: [TyEq] -> Either [UnificationError] Subst                                    
 unify = unify' False
 
-checkDecl :: Ty -> Ty -> Either [UnificationError] Subst                                    
-checkDecl tyDecl ty = unify' True [ty :=: tyDecl]
+fitDecl :: Ty -> Ty -> Either [UnificationError] Subst                                    
+fitDecl tyDecl ty = unify' True [ty :=: tyDecl]
