@@ -53,6 +53,7 @@ data PrimitiveOp  = OpAdd
                   | OpOr
                   | OpAnd
                   | OpEq
+                  | OpNe
                   | OpLe
                   | OpLt
                   | OpGe

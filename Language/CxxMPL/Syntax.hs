@@ -34,7 +34,6 @@ data MetaExpr  = MetaVar MetaVarName
                | MetaIntLit Int
                | MetaCall MetaVarName [MetaExpr]
                | MetaBox Ty MetaExpr
-               | MetaUnbox Ty MetaExpr
                deriving Show
 
 data Expr  = Typename Expr
@@ -48,7 +47,7 @@ data Expr  = Typename Expr
            | IntLit Int
            | UnaryMinus Expr
            | Box Ty Expr
-           | Unbox Ty Expr
+           | Unbox Expr
            deriving Show
 
 data PrimitiveOp  = OpAdd
@@ -59,6 +58,7 @@ data PrimitiveOp  = OpAdd
                   | OpOr
                   | OpAnd
                   | OpEq
+                  | OpNe
                   | OpLe
                   | OpLt
                   | OpGe

@@ -75,20 +75,19 @@ instance (Unparse MetaExpr) where
     unparse (MetaIntLit i)     = int i
     unparse (MetaCall var [])  = text var
     unparse (MetaCall var es)  = text var <> anglelist (map unparse es)
-    unparse (MetaBox TyInt e)  = unparse $ MetaCall "BoxedInt" [e]
-    unparse (MetaBox TyBool e) = unparse $ MetaCall "BoxedBool" [e]
+    unparse (MetaBox TyInt e)  = unparse $ MetaCall "Int" [e]
+    unparse (MetaBox TyBool e) = unparse $ MetaCall "Bool" [e]
                                  
-instance (Unparse Expr) where                                 
+instance (Unparse Expr) where
     unparse (Typename expr)            = text "typename" <+> unparse expr
-    unparse (Box TyInt expr)           = unparse $ Cons "BoxedInt" [expr]
-    unparse (Box TyBool expr)          = unparse $ Cons "BoxedBool" [expr]
-    unparse (Unbox TyInt expr)         = unparse $ Call "unboxInt" [expr]
-    unparse (Unbox TyBool expr)        = unparse $ Call "unboxBool" [expr]
-    unparse (FormalRef v)              = varname v
+    unparse (Box TyInt expr)           = unparse $ Cons "Int" [expr]
+    unparse (Box TyBool expr)          = unparse $ Cons "Bool" [expr]
+    unparse (Unbox expr)               = unparse expr <> text "::v"
+    unparse (FormalRef v)              = varname v              
     unparse (VarRef v)                 = varname v
     unparse (Cons cons [])             = varname cons
     unparse (Cons cons args)           = varname cons <> anglelist (map unparse args)
-    unparse (Call fun args)            = varname fun <> anglelist (map unparse args) <> colon <> colon <> text "v"
+    unparse (Call fun args)            = varname fun <> anglelist (map unparse args) <> text "::v"
     unparse (IntLit i)                 = int i
     unparse (BoolLit True)             = text "true"
     unparse (BoolLit False)            = text "false"
@@ -98,12 +97,19 @@ instance (Unparse Expr) where
                                          
 instance (Unparse PrimitiveOp) where
     unparse OpAdd  = text "+"
-    unparse OpEq   = text "=="
-    unparse OpMod  = text "%"
+    unparse OpSub  = text "-"
     unparse OpMul  = text "*"
+    unparse OpDiv  = text "/"
+    unparse OpMod  = text "%"
+    unparse OpEq   = text "=="
+    unparse OpNe   = text "!="
+    unparse OpLe   = text "<="
+    unparse OpLt   = text "<"
+    unparse OpGe   = text ">="
+    unparse OpGt   = text ">"
     unparse OpOr   = text "||"
     unparse OpAnd  = text "&&"
-
+                     
 instance (Unparse Program) where
     unparse (Program metadecls metadefs) = foldl ($+$) empty docs
         where docs = map unparse metadecls ++ [text ""] ++ (intersperse (text "") $ map unparse metadefs)

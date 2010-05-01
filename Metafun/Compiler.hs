@@ -23,51 +23,38 @@ compileDefEq name (Kiff.DefEq tau pats expr) = do
                 isVar _               = False
       formals = concat formalss
       tyRet = last $ uncurryTy tau
-  tyBody <- compileTy tyRet
-  body <- compileExpr expr        
+  body <- compileExpr expr
+  let body' = case formals of
+                [] -> body
+                _  -> addTypename body
   return $ MPL.MetaDef { MPL.mdefName = name,
                          MPL.mdefFormals = formals,
                          MPL.mdefSpec = specs',
                          MPL.mdefFields = [],
-                         MPL.mdefBody = (tyBody, body) }
-    
-compileTy (Kiff.TyPrimitive Kiff.TyInt)  = return $ MPL.TyInt
-compileTy (Kiff.TyPrimitive Kiff.TyBool) = return $ MPL.TyBool
-compileTy _ = return $ MPL.TyClass
+                         MPL.mdefBody = (MPL.TyClass, body') }
 
+addTypename :: MPL.Expr -> MPL.Expr
+addTypename (MPL.Unbox (MPL.Call fun args)) = MPL.Unbox (MPL.Call fun (map addTypename args))
+addTypename (MPL.Unbox e)                   = MPL.Unbox $ addTypename e
+addTypename (MPL.Box tau e)                   = MPL.Box tau $ addTypename e
+addTypename (MPL.PrimBinOp op l r)          = MPL.PrimBinOp op (addTypename l) (addTypename r)
+addTypename (MPL.Not e)                     = MPL.Not $ addTypename e
+addTypename (MPL.Call fun args)             = MPL.Typename $ MPL.Call fun $ map addTypename args
+addTypename (MPL.Cons con args)             = MPL.Cons con $ map addTypename args
+addTypename e@(MPL.FormalRef _)             = e
+addTypename e@(MPL.VarRef _)                = e
+addTypename e@(MPL.BoolLit _)               = e
+addTypename e@(MPL.IntLit _)                = e
+addTypename (MPL.UnaryMinus e)              = MPL.UnaryMinus $ addTypename e                                                                                
 convertTy (Kiff.TyPrimitive Kiff.TyInt)  = MPL.TyInt
 convertTy (Kiff.TyPrimitive Kiff.TyBool) = MPL.TyBool
 
-specializeConName :: Kiff.ConName -> [Kiff.Ty] -> Kiff.ConName                                           
-specializeConName name specs = concat $ intersperse "_" $ name:(map tag specs)
-    where tag (Kiff.TyPrimitive Kiff.TyInt)  = "Int"
-          tag (Kiff.TyPrimitive Kiff.TyBool) = "Bool"
-          tag _                              = "_"
-
 compileTypeDecl :: Kiff.TypeDecl -> Compile [MPL.MetaDecl]
-compileTypeDecl (Kiff.DataDecl name tvnames cons) = do
-  mapM compileDataCon $ concatMap specialize cons
-    where tvs = map Kiff.TvName tvnames
-          specialize con@(Kiff.DataCon name tys) = map specializeAs spectys
-              where specializeAs specs = Kiff.DataCon name' tys'
-                        where name' = specializeConName name $ zipWith helper specs tvs
-                                  where helper (Just ty) _  = ty
-                                        helper Nothing   tv = Kiff.TyVar tv
-                                              
-                              subst = foldl step Subst.empty $ zip specs tvs
-                              step s (Nothing, _)    = s
-                              step s ((Just ty), tv) = Subst.add s tv ty
-
-                              tys' = map (Subst.xform subst) tys
-                                      
-          spectysOf tv = [Nothing, Just $ Kiff.TyPrimitive Kiff.TyInt, Just $ Kiff.TyPrimitive Kiff.TyBool]
-              where ty = Kiff.TyVar tv
-          spectys = combinations $ map spectysOf tvs
+compileTypeDecl (Kiff.DataDecl name tvnames cons) = mapM compileDataCon cons
                     
-combinations :: [[a]] -> [[a]]
-combinations []          = [[]]
-combinations ([]:_)      = []
-combinations ((x:xs):ys) = (map (x:) (combinations ys)) ++ (combinations (xs:ys))
+unbox :: MPL.Expr -> MPL.Expr
+unbox (MPL.Box _ expr) = expr
+unbox expr             = MPL.Unbox expr
                            
 
 compileDataCon :: Kiff.DataCon -> Compile MPL.MetaDecl
@@ -94,49 +81,38 @@ uncurryApp :: Kiff.TExpr -> [Kiff.TExpr]
 uncurryApp (Kiff.App _ f x) = (uncurryApp f) ++ [x]
 uncurryApp expr             = [expr]                              
 
-callCon :: Kiff.ConName -> Kiff.Ty -> Kiff.ConName
-callCon con tau = specializeConName con args
-    where args = case t of
-                   Kiff.TyList tElem -> [tElem]
-                   _ -> tail $ uncurryTyApp t
-          t = last $ uncurryTy tau
-                              
 compileExpr :: Kiff.TExpr -> Compile MPL.Expr
 compileExpr (Kiff.Var tau var) = return $ MPL.FormalRef var
-compileExpr (Kiff.Con tau con) = return $ MPL.Cons (callCon con tau) []
+compileExpr (Kiff.Con tau con) = return $ MPL.Cons con []
 compileExpr e@(Kiff.App tau f x) = do
   let (fun:args) = uncurryApp e
       mpl = case fun of
-              Kiff.Var _ var -> case tau of
-                                  Kiff.TyPrimitive _  -> MPL.Call var
-                                  _                   -> MPL.Typename . MPL.Call var
-              Kiff.Con tau con -> MPL.Cons (callCon con tau)
+              Kiff.Var _ var -> MPL.Call var
+              Kiff.Con tau con -> MPL.Cons con
   args' <- mapM compileExpr args
   return $ mpl args'
 compileExpr (Kiff.Lam tau pats body) = error "Lambdas not supported"
 compileExpr (Kiff.Let tau defs body) = undefined
 compileExpr (Kiff.PrimBinOp tau op left right) = do
-  left' <- compileExpr left
-  right' <- compileExpr right
+  left' <- liftM unbox $ compileExpr left
+  right' <- liftM unbox $ compileExpr right
   let op' = compileOp op
-  return $ MPL.PrimBinOp op' left' right'
+  return $ MPL.Box (convertTy tau) $ MPL.PrimBinOp op' left' right'
 compileExpr (Kiff.IfThenElse tau cond thn els) = undefined
-compileExpr (Kiff.IntLit _ n) = return $ MPL.IntLit n
-compileExpr (Kiff.BoolLit _ b) = return $ MPL.BoolLit b
+compileExpr (Kiff.IntLit _ n) = return $ MPL.Box MPL.TyInt $ MPL.IntLit n
+compileExpr (Kiff.BoolLit _ b) = return $ MPL.Box MPL.TyBool $ MPL.BoolLit b
 compileExpr (Kiff.UnaryMinus _ e) = do
-  e' <- compileExpr e
-  return $ MPL.UnaryMinus e'
+  e' <- liftM unbox $ compileExpr e
+  return $ MPL.Box MPL.TyInt $ MPL.UnaryMinus e'
 compileExpr (Kiff.Not _ e) = do
-  e' <- compileExpr e      
-  return $ MPL.Not e'
+  e' <- liftM unbox $ compileExpr e      
+  return $ MPL.Box MPL.TyBool $ MPL.Not e'
 
 compileMetaTy :: Kiff.Ty -> Compile MPL.MetaTy
-compileMetaTy (Kiff.TyPrimitive Kiff.TyInt)   = return MPL.MetaInt
-compileMetaTy (Kiff.TyPrimitive Kiff.TyBool)  = return MPL.MetaBool
 compileMetaTy tau@(Kiff.TyFun x y)              = do
   mtys <- mapM compileMetaTy $ init $ uncurryTy tau
   return $ MPL.MetaClass mtys
-compileMetaTy _                               = return $ MPL.MetaClass [] -- TODO
+compileMetaTy _                               = return $ MPL.MetaClass []
 
 compileOp :: Kiff.PrimitiveOp -> MPL.PrimitiveOp -- TODO: use the same def in both languages
 compileOp Kiff.OpAdd = MPL.OpAdd
@@ -145,22 +121,25 @@ compileOp Kiff.OpMul = MPL.OpMul
 compileOp Kiff.OpDiv = MPL.OpDiv
 compileOp Kiff.OpMod = MPL.OpMod
 compileOp Kiff.OpEq  = MPL.OpEq
+compileOp Kiff.OpGt  = MPL.OpGt
+compileOp Kiff.OpGe  = MPL.OpGe
+compileOp Kiff.OpLe  = MPL.OpLe
+compileOp Kiff.OpLt  = MPL.OpLt
 compileOp Kiff.OpAnd = MPL.OpAnd
 compileOp Kiff.OpOr  = MPL.OpOr
-
+                       
 varsAndSpec :: Kiff.TPat -> Compile ([MPL.MetaVarDecl], MPL.MetaSpecialization)
 varsAndSpec (Kiff.PVar tau var)       = do
   mty <- compileMetaTy tau
   return ([MPL.MetaVarDecl var mty], MPL.MetaVar var)
 varsAndSpec (Kiff.PApp tau con pats)  = do
   (mdecls, mspecs) <- liftM unzip $ mapM varsAndSpec pats
-  return (concat mdecls, MPL.MetaCall con' mspecs)
-      where con' = callCon con tau
+  return (concat mdecls, MPL.MetaCall con mspecs)
 varsAndSpec (Kiff.Wildcard tau)       = do
   mv <- newMetaVarName
   varsAndSpec (Kiff.PVar tau mv)
-varsAndSpec (Kiff.IntPat _ n)         = return ([], MPL.MetaIntLit n)
-varsAndSpec (Kiff.BoolPat _ b)        = return ([], MPL.MetaBoolLit b)
+varsAndSpec (Kiff.IntPat _ n)       = return ([], MPL.MetaBox MPL.TyInt $ MPL.MetaIntLit n)
+varsAndSpec (Kiff.BoolPat _ b)      = return ([], MPL.MetaBox MPL.TyBool $ MPL.MetaBoolLit b)
 
 uncurryTy (Kiff.TyFun t t')  = (t:uncurryTy t')
 uncurryTy t                  = [t]
