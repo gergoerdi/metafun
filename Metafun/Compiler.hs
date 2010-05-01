@@ -64,18 +64,31 @@ compileDataCon (Kiff.DataCon name tys) = do
 
                                             
 compile :: Kiff.TProgram -> Compile MPL.Program
-compile (Kiff.Program typedecls defs) = do
-  mtydecls <- concatMapM compileTypeDecl (listdecl:typedecls)
-  mvardecls <- mapM mvardecl defs
-  metadefs <- concatMapM compileDef defs
-  let metadecls = mtydecls ++ mvardecls
-  return $ MPL.Program metadecls metadefs
-      where listdecl = Kiff.DataDecl "list" ["a"] [nil,cons]
+compile (Kiff.Program typeDecls defs) = do
+  mtyDecls <- concatMapM compileTypeDecl (listDecl:typeDecls)
+  mvarDecls <- mapM mvarDecl defs
+  metaDefs <- concatMapM compileDef defs
+  let metaDecls = mtyDecls ++ mvarDecls
+  return $ MPL.Program (platformDecls ++ metaDecls) (platformDefs ++ metaDefs)
+      where listDecl = Kiff.DataDecl "list" ["a"] [nil,cons]
                 where nil = Kiff.DataCon "nil" []
                       cons = Kiff.DataCon "cons" [Kiff.TyVar (Kiff.TvName "a"), Kiff.TyList $ Kiff.TyVar (Kiff.TvName "a")]
 
-            mvardecl (Kiff.Def tau name _ _) = liftM (MPL.MetaDecl name) $ mapM compileMetaTy tys
+            mvarDecl (Kiff.Def tau name _ _) = liftM (MPL.MetaDecl name) $ mapM compileMetaTy tys
               where tys = init $ uncurryTy tau
+            platformDecls = [MPL.MetaDecl "Int" [MPL.MetaInt],
+                             MPL.MetaDecl "Bool" [MPL.MetaBool]]
+            platformDefs = [MPL.MetaDef { MPL.mdefName = "Int",
+                                          MPL.mdefFormals = [MPL.MetaVarDecl "x" MPL.MetaInt],
+                                          MPL.mdefSpec = Nothing,
+                                          MPL.mdefFields = [],
+                                          MPL.mdefBody = (MPL.TyInt, MPL.FormalRef "x") },
+                            MPL.MetaDef { MPL.mdefName = "Bool",
+                                          MPL.mdefFormals = [MPL.MetaVarDecl "b" MPL.MetaBool],
+                                          MPL.mdefSpec = Nothing,
+                                          MPL.mdefFields = [],
+                                          MPL.mdefBody = (MPL.TyBool, MPL.FormalRef "b") }]
+                           
 
 uncurryApp :: Kiff.TExpr -> [Kiff.TExpr]
 uncurryApp (Kiff.App _ f x) = (uncurryApp f) ++ [x]
