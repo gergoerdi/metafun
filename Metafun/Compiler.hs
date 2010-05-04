@@ -11,11 +11,17 @@ import Control.Monad
 import Data.List
     
 import Debug.Trace
+
+type TProgram = Kiff.Program Kiff.Ty
+type TDef = Kiff.Def Kiff.Ty
+type TDefEq = Kiff.DefEq Kiff.Ty
+type TExpr = Kiff.Expr Kiff.Ty
+type TPat = Kiff.Pat Kiff.Ty
     
-compileDef :: Kiff.TDef -> Compile [MPL.MetaDef]
+compileDef :: TDef -> Compile [MPL.MetaDef]
 compileDef (Kiff.Def tau name _ eqs) = mapM (compileDefEq name) eqs
 
-compileDefEq :: Kiff.VarName -> Kiff.TDefEq -> Compile MPL.MetaDef
+compileDefEq :: Kiff.VarName -> TDefEq -> Compile MPL.MetaDef
 compileDefEq name (Kiff.DefEq tau pats expr) = do
   (formalss, specs) <- liftM unzip $ mapM varsAndSpec pats
   let specs' = if (all isVar specs) then Nothing else Just specs
@@ -63,7 +69,7 @@ compileDataCon (Kiff.DataCon name tys) = do
   return $ MPL.MetaDecl name mtys
 
                                             
-compile :: Kiff.TProgram -> Compile MPL.Program
+compile :: TProgram -> Compile MPL.Program
 compile (Kiff.Program typeDecls defs) = do
   mtyDecls <- concatMapM compileTypeDecl (listDecl:typeDecls)
   mvarDecls <- mapM mvarDecl defs
@@ -90,11 +96,11 @@ compile (Kiff.Program typeDecls defs) = do
                                           MPL.mdefBody = (MPL.TyBool, MPL.FormalRef "b") }]
                            
 
-uncurryApp :: Kiff.TExpr -> [Kiff.TExpr]
+uncurryApp :: TExpr -> [TExpr]
 uncurryApp (Kiff.App _ f x) = (uncurryApp f) ++ [x]
 uncurryApp expr             = [expr]                              
 
-compileExpr :: Kiff.TExpr -> Compile MPL.Expr
+compileExpr :: TExpr -> Compile MPL.Expr
 compileExpr (Kiff.Var tau var) = return $ MPL.FormalRef var
 compileExpr (Kiff.Con tau con) = return $ MPL.Cons con []
 compileExpr e@(Kiff.App tau f x) = do
@@ -141,7 +147,7 @@ compileOp Kiff.OpLt  = MPL.OpLt
 compileOp Kiff.OpAnd = MPL.OpAnd
 compileOp Kiff.OpOr  = MPL.OpOr
                        
-varsAndSpec :: Kiff.TPat -> Compile ([MPL.MetaVarDecl], MPL.MetaSpecialization)
+varsAndSpec :: TPat -> Compile ([MPL.MetaVarDecl], MPL.MetaSpecialization)
 varsAndSpec (Kiff.PVar tau var)       = do
   mty <- compileMetaTy tau
   return ([MPL.MetaVarDecl var mty], MPL.MetaVar var)

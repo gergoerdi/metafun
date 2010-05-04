@@ -16,7 +16,7 @@ import Data.Either
 inferGroup :: Supply TvId -> Ctx -> [Def ()] -> Either [UnificationError] [Def Ty]
 inferGroup ids ctx defs = case unify eqs of
                             Left errs  -> Left errs
-                            Right s    -> foldl step (Right []) $ zipWith (\ ids tdef -> checkDecl ids (mapTy (xform s) tdef)) (split ids''') tdefs
+                            Right s    -> foldl step (Right []) $ zipWith (\ ids tdef -> checkDecl ids (fmap (xform s) tdef)) (split ids''') tdefs
     where (ids', ids'', ids''') = split3 ids
           (tdefs, eqss) = unzip $ zipWith collect (split ids') defs
           eqs = (zipWith eq newVars tdefs) ++ concat eqss
@@ -36,7 +36,7 @@ inferGroup ids ctx defs = case unify eqs of
                                                            Nothing  -> Right tdef
                                                            Just tau'  -> case fitDecl tau' tau of
                                                                          Left errs  -> Left errs
-                                                                         Right s    -> Right $ Def tau' name (Just tau') (map (mapTy $ xform s) tdefeqs)
+                                                                         Right s    -> Right $ Def tau' name (Just tau') (map (fmap $ xform s) tdefeqs)
 
           step :: Either [UnificationError] [Def Ty] -> Either [UnificationError] (Def Ty) -> Either [UnificationError] [Def Ty]
           step (Left errs)    (Left errs')  = Left $ errs' ++ errs

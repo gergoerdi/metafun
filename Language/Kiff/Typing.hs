@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Language.Kiff.Typing where
 
@@ -11,35 +11,21 @@ data TyEq = Ty :=: Ty deriving Show
           
 class Typed a where
     getTy :: a -> Ty
-    mapTy :: (Ty -> Ty) -> a -> a
 
-instance Typed TDef where
+instance Typed (Def Ty) where
     getTy (Def tau name decl tdefeqs) = tau
-    mapTy f (Def tau name decl defeqs) = Def tau' name decl defeqs'
-        where tau' = f tau
-              defeqs' = map (mapTy f) defeqs
 
-instance Typed TDefEq where
+instance Typed (DefEq Ty) where
     getTy (DefEq tau pats body) = tau
-    mapTy f (DefEq tau pats body) = DefEq tau' pats' body'
-        where tau' = f tau
-              pats' = map (mapTy f) pats
-              body' = mapTy f body
 
-instance Typed TPat where
+instance Typed (Pat Ty) where
     getTy (PVar tau _)    = tau
     getTy (PApp tau _ _)  = tau
     getTy (Wildcard tau)  = tau
     getTy (IntPat tau _)  = tau
     getTy (BoolPat tau _) = tau
 
-    mapTy f (PVar tau var)       = PVar (f tau) var
-    mapTy f (PApp tau con pats)  = PApp (f tau) con (map (mapTy f) pats)
-    mapTy f (Wildcard tau)       = Wildcard (f tau)
-    mapTy f (IntPat tau n)       = IntPat (f tau) n
-    mapTy f (BoolPat tau b)      = BoolPat (f tau) b
-
-instance Typed TExpr where
+instance Typed (Expr Ty) where
     getTy (Var tau _)             = tau
     getTy (Con tau _)             = tau
     getTy (App tau _ _)           = tau
@@ -51,18 +37,6 @@ instance Typed TExpr where
     getTy (BoolLit tau _)         = tau
     getTy (UnaryMinus tau _)      = tau
     getTy (Not tau expr)          = tau
-                                  
-    mapTy f (Var tau var)                  = Var (f tau) var
-    mapTy f (Con tau con)                  = Con (f tau) con
-    mapTy f (App tau fun x)                = App (f tau) (mapTy f fun) (mapTy f x)
-    mapTy f (Lam tau pats body)            = Lam (f tau) (map (mapTy f) pats) (mapTy f body)
-    mapTy f (Let tau defs body)            = Let (f tau) (map (mapTy f) defs) (mapTy f body)
-    mapTy f (PrimBinOp tau op left right)  = PrimBinOp (f tau) op (mapTy f left) (mapTy f right)
-    mapTy f (IfThenElse tau cond thn els)  = IfThenElse (f tau) (mapTy f cond) (mapTy f thn) (mapTy f els)
-    mapTy f (IntLit tau n)                 = IntLit (f tau) n
-    mapTy f (BoolLit tau b)                = BoolLit (f tau) b
-    mapTy f (UnaryMinus tau expr)          = UnaryMinus (f tau) (mapTy f expr)
-    mapTy f (Not tau expr)                 = Not (f tau) (mapTy f expr)
                                    
 data VarBind  = Mono Ty
               | Poly Ty
