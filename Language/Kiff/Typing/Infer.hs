@@ -13,6 +13,11 @@ import qualified Data.Map as Map
 import Data.Supply
 import Data.Either
 
+    
+getTy :: Tagged e => e Ty -> Ty    
+getTy e = getTag e    
+
+          
 inferGroup :: Supply TvId -> Ctx -> [Def ()] -> Either [UnificationError] [Def Ty]
 inferGroup ids ctx defs = case unify eqs of
                             Left errs  -> Left errs

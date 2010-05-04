@@ -102,7 +102,35 @@ instance Functor Pat where
                         
 
 
-    
+class Functor d => Tagged d where
+    getTag :: d a -> a
+
+instance Tagged Def where
+    getTag (Def xi _ _ _) = xi
+
+instance Tagged DefEq where
+    getTag (DefEq xi _ _) = xi
+
+instance Tagged Expr where
+    getTag (Var xi _)             = xi
+    getTag (Con xi _)             = xi
+    getTag (App xi _ _)           = xi
+    getTag (Lam xi _ _)           = xi
+    getTag (Let xi _ _)           = xi
+    getTag (PrimBinOp xi _ _ _)   = xi
+    getTag (IfThenElse xi _ _ _)  = xi
+    getTag (IntLit xi _)          = xi
+    getTag (BoolLit xi _)         = xi
+    getTag (UnaryMinus xi _)      = xi
+    getTag (Not xi expr)          = xi
+
+instance Tagged Pat where
+    getTag (PVar xi _)    = xi
+    getTag (PApp xi _ _)  = xi
+    getTag (Wildcard xi)  = xi
+    getTag (IntPat xi _)  = xi
+    getTag (BoolPat xi _) = xi
+                                   
     
 instance Show Tv where
     show (TvName v) = v

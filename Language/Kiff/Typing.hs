@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-
 module Language.Kiff.Typing where
 
 import Language.Kiff.Syntax
@@ -9,35 +7,6 @@ import Data.Supply
 
 data TyEq = Ty :=: Ty deriving Show
           
-class Typed a where
-    getTy :: a -> Ty
-
-instance Typed (Def Ty) where
-    getTy (Def tau name decl tdefeqs) = tau
-
-instance Typed (DefEq Ty) where
-    getTy (DefEq tau pats body) = tau
-
-instance Typed (Pat Ty) where
-    getTy (PVar tau _)    = tau
-    getTy (PApp tau _ _)  = tau
-    getTy (Wildcard tau)  = tau
-    getTy (IntPat tau _)  = tau
-    getTy (BoolPat tau _) = tau
-
-instance Typed (Expr Ty) where
-    getTy (Var tau _)             = tau
-    getTy (Con tau _)             = tau
-    getTy (App tau _ _)           = tau
-    getTy (Lam tau _ _)           = tau
-    getTy (Let tau _ _)           = tau
-    getTy (PrimBinOp tau _ _ _)   = tau
-    getTy (IfThenElse tau _ _ _)  = tau
-    getTy (IntLit tau _)          = tau
-    getTy (BoolLit tau _)         = tau
-    getTy (UnaryMinus tau _)      = tau
-    getTy (Not tau expr)          = tau
-                                   
 data VarBind  = Mono Ty
               | Poly Ty
               deriving Show
