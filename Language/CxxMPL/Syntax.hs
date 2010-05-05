@@ -21,13 +21,13 @@ data TypedExpr = TypedExpr Ty Expr
               
 data MetaDef = MetaDef { mdefName :: MetaVarName,
                          mdefFormals :: [MetaVarDecl],
-                         mdefSpec :: Maybe [MetaSpecialization],
+                         mdefSpec :: MetaSpecialization,
                          mdefFields :: [Field],
                          mdefBody :: (Ty, Expr) } deriving Show
 
 data Field = Field VarName (Ty, Expr) deriving Show
 
-type MetaSpecialization = MetaExpr
+type MetaSpecialization = Maybe [MetaExpr]
 
 data MetaExpr  = MetaVar MetaVarName
                | MetaBoolLit Bool

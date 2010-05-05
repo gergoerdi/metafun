@@ -9,18 +9,23 @@ import qualified Language.CxxMPL.Syntax as MPL
 import Metafun.Compiler.State
 import Control.Monad
 import Data.List
+import Data.Maybe
     
-import Debug.Trace
-
 type TProgram = Kiff.Program Kiff.Ty
 type TDef = Kiff.Def Kiff.Ty
 type TDefEq = Kiff.DefEq Kiff.Ty
 type TExpr = Kiff.Expr Kiff.Ty
 type TPat = Kiff.Pat Kiff.Ty
     
-compileDef :: TDef -> Compile [MPL.MetaDef]
-compileDef (Kiff.Def tau name _ eqs) = mapM (compileDefEq name) eqs
+compileDef :: TDef -> Maybe Kiff.VarName -> Compile (MPL.MetaDecl, [MPL.MetaDef])
+compileDef (Kiff.Def tau name _ eqs) nameOverride = do
+  decl <- liftM (MPL.MetaDecl name') $ mapM compileMetaTy tys
+  defs <- mapM (compileDefEq name') eqs
+  return (decl, defs)
+    where tys = init $ uncurryTy tau
+          name' = fromMaybe name nameOverride
 
+                                               
 compileDefEq :: Kiff.VarName -> TDefEq -> Compile MPL.MetaDef
 compileDefEq name (Kiff.DefEq tau pats expr) = do
   (formalss, specs) <- liftM unzip $ mapM varsAndSpec pats
@@ -72,16 +77,15 @@ compileDataCon (Kiff.DataCon name tys) = do
 compile :: TProgram -> Compile MPL.Program
 compile (Kiff.Program typeDecls defs) = do
   mtyDecls <- concatMapM compileTypeDecl (listDecl:typeDecls)
-  mvarDecls <- mapM mvarDecl defs
-  metaDefs <- concatMapM compileDef defs
-  let metaDecls = mtyDecls ++ mvarDecls
-  return $ MPL.Program (platformDecls ++ metaDecls) (platformDefs ++ metaDefs)
+  (decls, defss) <- liftM unzip $ mapM (\ def -> compileDef def Nothing) defs
+  (decls', defss') <- liftM unzip $ getLiftedDefs
+  let defs = concat $ defss ++ defss'
+      decls'' = mtyDecls ++ decls' ++ decls
+  return $ MPL.Program (platformDecls ++ decls'') (platformDefs ++ defs)
       where listDecl = Kiff.DataDecl "list" ["a"] [nil,cons]
                 where nil = Kiff.DataCon "nil" []
                       cons = Kiff.DataCon "cons" [Kiff.TyVar (Kiff.TvName "a"), Kiff.TyList $ Kiff.TyVar (Kiff.TvName "a")]
 
-            mvarDecl (Kiff.Def tau name _ _) = liftM (MPL.MetaDecl name) $ mapM compileMetaTy tys
-              where tys = init $ uncurryTy tau
             platformDecls = [MPL.MetaDecl "Int" [MPL.MetaInt],
                              MPL.MetaDecl "Bool" [MPL.MetaBool]]
             platformDefs = [MPL.MetaDef { MPL.mdefName = "Int",
@@ -110,19 +114,30 @@ compileExpr e@(Kiff.App tau f x) = do
               Kiff.Con tau con -> MPL.Cons con
   args' <- mapM compileExpr args
   return $ mpl args'
+         
 compileExpr (Kiff.Lam tau pats body) = error "Lambdas not supported"
-compileExpr (Kiff.Let tau defs body) = undefined
+compileExpr (Kiff.Let tau defs body) = do
+  namedDefs <- mkLiftedNames defs
+  withLiftedNames namedDefs $ do
+    mapM compile namedDefs
+    compileExpr body
+        where compile (liftedName, vardef) = do compiledDef <- compileDef vardef (Just liftedName)
+                                                addLiftedDef compiledDef
+                                                            
+    
 compileExpr (Kiff.PrimBinOp tau op left right) = do
   left' <- liftM unbox $ compileExpr left
   right' <- liftM unbox $ compileExpr right
   let op' = compileOp op
   return $ MPL.Box (convertTy tau) $ MPL.PrimBinOp op' left' right'
+         
 compileExpr (Kiff.IfThenElse tau cond thn els) = undefined
 compileExpr (Kiff.IntLit _ n) = return $ MPL.Box MPL.TyInt $ MPL.IntLit n
 compileExpr (Kiff.BoolLit _ b) = return $ MPL.Box MPL.TyBool $ MPL.BoolLit b
 compileExpr (Kiff.UnaryMinus _ e) = do
   e' <- liftM unbox $ compileExpr e
   return $ MPL.Box MPL.TyInt $ MPL.UnaryMinus e'
+
 compileExpr (Kiff.Not _ e) = do
   e' <- liftM unbox $ compileExpr e      
   return $ MPL.Box MPL.TyBool $ MPL.Not e'
@@ -147,7 +162,7 @@ compileOp Kiff.OpLt  = MPL.OpLt
 compileOp Kiff.OpAnd = MPL.OpAnd
 compileOp Kiff.OpOr  = MPL.OpOr
                        
-varsAndSpec :: TPat -> Compile ([MPL.MetaVarDecl], MPL.MetaSpecialization)
+varsAndSpec :: TPat -> Compile ([MPL.MetaVarDecl], MPL.MetaExpr)
 varsAndSpec (Kiff.PVar tau var)       = do
   mty <- compileMetaTy tau
   return ([MPL.MetaVarDecl var mty], MPL.MetaVar var)
