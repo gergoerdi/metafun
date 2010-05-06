@@ -18,28 +18,36 @@ type TExpr = Kiff.Expr Kiff.Ty
 type TPat = Kiff.Pat Kiff.Ty
     
 compileDef :: TDef -> Maybe Kiff.VarName -> Compile (MPL.MetaDecl, [MPL.MetaDef])
-compileDef (Kiff.Def tau name _ eqs) nameOverride = do
-  decl <- liftM (MPL.MetaDecl name') $ mapM compileMetaTy tys
-  defs <- mapM (compileDefEq name') eqs
+compileDef def@(Kiff.Def _ _ _ eqs) nameOverride = do
+  (name, decl) <- compileDefDecl def nameOverride
+  defs <- mapM (compileDefEq name) eqs
   return (decl, defs)
-    where tys = init $ uncurryTy tau
-          name' = fromMaybe name nameOverride
 
+compileDefDecl :: TDef -> Maybe Kiff.VarName -> Compile (MPL.MetaVarName, MPL.MetaDecl)
+compileDefDecl (Kiff.Def tau name _ eqs) nameOverride = do
+  mtys <- mapM compileMetaTy tys
+  formalsInherited <- getScopeVars
+  let mtysInherited = map (\ (MPL.MetaVarDecl _ mty) -> mty) formalsInherited
+  return (name', MPL.MetaDecl name' (mtysInherited ++ mtys))
+      where name' = fromMaybe name nameOverride
+            tys = init $ uncurryTy tau
                                                
 compileDefEq :: Kiff.VarName -> TDefEq -> Compile MPL.MetaDef
 compileDefEq name (Kiff.DefEq tau pats expr) = do
   (formalss, specs) <- liftM unzip $ mapM varsAndSpec pats
+  formalsInherited <- getScopeVars
   let specs' = if (all isVar specs) then Nothing else Just specs
           where isVar (MPL.MetaVar _) = True
                 isVar _               = False
       formals = concat formalss
+      formals' = formalsInherited ++ formals
       tyRet = last $ uncurryTy tau
-  body <- compileExpr expr
-  let body' = case formals of
+  body <- withScopeVars formals $ compileExpr expr
+  let body' = case formals' of
                 [] -> body
                 _  -> addTypename body
   return $ MPL.MetaDef { MPL.mdefName = name,
-                         MPL.mdefFormals = formals,
+                         MPL.mdefFormals = formals',
                          MPL.mdefSpec = specs',
                          MPL.mdefFields = [],
                          MPL.mdefBody = (MPL.TyClass, body') }
@@ -79,7 +87,7 @@ compile (Kiff.Program typeDecls defs) = do
   mtyDecls <- concatMapM compileTypeDecl (listDecl:typeDecls)
   (decls, defss) <- liftM unzip $ mapM (\ def -> compileDef def Nothing) defs
   (decls', defss') <- liftM unzip $ getLiftedDefs
-  let defs = concat $ defss ++ defss'
+  let defs = concat $ defss' ++ defss
       decls'' = mtyDecls ++ decls' ++ decls
   return $ MPL.Program (platformDecls ++ decls'') (platformDefs ++ defs)
       where listDecl = Kiff.DataDecl "list" ["a"] [nil,cons]
@@ -105,7 +113,13 @@ uncurryApp (Kiff.App _ f x) = (uncurryApp f) ++ [x]
 uncurryApp expr             = [expr]                              
 
 compileExpr :: TExpr -> Compile MPL.Expr
-compileExpr (Kiff.Var tau var) = return $ MPL.FormalRef var
+compileExpr (Kiff.Var tau var) = do
+  lifted <- lookupLiftedName var
+  case lifted of
+    Nothing -> return $ MPL.FormalRef var
+    Just name' -> do scopeVars <- getScopeVars
+                     return $ MPL.Call name' (map (\ (MPL.MetaVarDecl name _) -> MPL.FormalRef name) scopeVars)
+                           
 compileExpr (Kiff.Con tau con) = return $ MPL.Cons con []
 compileExpr e@(Kiff.App tau f x) = do
   let (fun:args) = uncurryApp e
@@ -145,7 +159,7 @@ compileExpr (Kiff.Not _ e) = do
 compileMetaTy :: Kiff.Ty -> Compile MPL.MetaTy
 compileMetaTy tau@(Kiff.TyFun x y)              = do
   mtys <- mapM compileMetaTy $ init $ uncurryTy tau
-  return $ MPL.MetaClass mtys
+  return $ MPL.MetaClass $ mtys
 compileMetaTy _                               = return $ MPL.MetaClass []
 
 compileOp :: Kiff.PrimitiveOp -> MPL.PrimitiveOp -- TODO: use the same def in both languages
