@@ -112,22 +112,27 @@ uncurryApp :: TExpr -> [TExpr]
 uncurryApp (Kiff.App _ f x) = (uncurryApp f) ++ [x]
 uncurryApp expr             = [expr]                              
 
+compileCall :: MPL.MetaVarName -> [MPL.Expr] -> Compile MPL.Expr
+compileCall name args = do scopeVars <- getScopeVars
+                           return $ MPL.Call name (map toArg scopeVars ++ args)
+    where toArg (MPL.MetaVarDecl name _) = MPL.FormalRef name
+                              
 compileExpr :: TExpr -> Compile MPL.Expr
 compileExpr (Kiff.Var tau var) = do
   lifted <- lookupLiftedName var
   case lifted of
     Nothing -> return $ MPL.FormalRef var
-    Just name' -> do scopeVars <- getScopeVars
-                     return $ MPL.Call name' (map (\ (MPL.MetaVarDecl name _) -> MPL.FormalRef name) scopeVars)
+    Just name' -> compileCall name' []
                            
 compileExpr (Kiff.Con tau con) = return $ MPL.Cons con []
-compileExpr e@(Kiff.App tau f x) = do
-  let (fun:args) = uncurryApp e
-      mpl = case fun of
-              Kiff.Var _ var -> MPL.Call var
-              Kiff.Con tau con -> MPL.Cons con
-  args' <- mapM compileExpr args
-  return $ mpl args'
+compileExpr e@(Kiff.App _ f x) = do args' <- mapM compileExpr args
+                                    case fun of
+                                      Kiff.Var _ var -> do lifted <- lookupLiftedName var
+                                                           case lifted of
+                                                             Nothing -> return $ MPL.Call var args'
+                                                             Just name' -> compileCall name' args'
+                                      Kiff.Con tau con -> return $ MPL.Cons con args'
+    where (fun:args) = uncurryApp e
          
 compileExpr (Kiff.Lam tau pats body) = error "Lambdas not supported"
 compileExpr (Kiff.Let tau defs body) = do
