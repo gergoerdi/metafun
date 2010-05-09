@@ -35,8 +35,9 @@ compileDefDecl (Kiff.Def tau name _ eqs) nameOverride = do
 compileDefEq :: Kiff.VarName -> TDefEq -> Compile MPL.MetaDef
 compileDefEq name (Kiff.DefEq tau pats expr) = do
   (formalss, specs) <- liftM unzip $ mapM varsAndSpec pats
-  formalsInherited <- getScopeVars
-  let specs' = if (all isVar specs) then Nothing else Just specs
+  formalsInherited <- getScopeVars                     
+  let specs' = map (\ (MPL.MetaVarDecl name _) -> MPL.MetaVar name) formalsInherited ++ specs
+      specs'' = if (all isVar specs') then Nothing else Just specs'
           where isVar (MPL.MetaVar _) = True
                 isVar _               = False
       formals = concat formalss
@@ -48,7 +49,7 @@ compileDefEq name (Kiff.DefEq tau pats expr) = do
                 _  -> addTypename body
   return $ MPL.MetaDef { MPL.mdefName = name,
                          MPL.mdefFormals = formals',
-                         MPL.mdefSpec = specs',
+                         MPL.mdefSpec = specs'',
                          MPL.mdefFields = [],
                          MPL.mdefBody = (MPL.TyClass, body') }
 
