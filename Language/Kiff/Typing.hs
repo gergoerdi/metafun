@@ -47,5 +47,6 @@ occurs :: Tv -> Ty -> Bool
 occurs v (TyVar v')   = v == v'
 occurs v (TyFun t u)  = occurs v t || occurs v u
 occurs v (TyApp t u)  = occurs v t || occurs v u
+occurs v (TyList t)   = occurs v t
 occurs v _            = False                         
                     

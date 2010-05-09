@@ -15,16 +15,24 @@ import Data.Supply
 mkIds :: IO (Supply TvId)
 mkIds = newEnumSupply
 
-test = do
-  Right prog@(Program decls defs) <- parseFile filename
-  ids <- mkIds
-  let (ids', ids'') = split2 ids
-      ctx = mkCtx ids'
-      Right (ctx', tdefs) = inferDefs ids'' ctx defs
-      tprog = Program decls tdefs
-  print ctx'
-  print tprog
-  let mpl = evalState (compile tprog) mkCompilerState
-  print $ unparse mpl
-      where filename = "lorentey-c++-tmp.hs"
-      --where filename = "sum.hs"
+compileFile filename = do
+  parseRes <- parseFile filename
+  case parseRes of
+    Left errors -> do print errors
+                      return Nothing
+    Right prog@(Program decls defs) -> do
+                            ids <- mkIds
+                            let (ids', ids'') = split2 ids
+                                ctx = mkCtx ids'
+                            case inferDefs ids'' ctx defs of
+                              Left errors -> do putStrLn $ unlines $ map show errors
+                                                return Nothing
+                              Right (ctx', tdefs) -> do let tprog = Program decls tdefs
+                                                            mpl = evalState (compile tprog) mkCompilerState
+                                                        return $ Just mpl
+
+test = do compileRes <- compileFile filename
+          case compileRes of
+            Nothing -> return ()
+            Just mpl -> print $ unparse mpl
+    where filename = "lorentey-c++-tmp.hs"
