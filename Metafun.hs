@@ -2,15 +2,18 @@ module Metafun where
 
 import Metafun.Compiler
 import Metafun.Compiler.State
-import Control.Monad.State
-
+    
 import Language.Kiff.Syntax
 import Language.Kiff.Parser
 import Language.Kiff.Typing
 import Language.Kiff.Typing.Infer
 import Language.CxxMPL.Unparser
 
-import Data.Supply    
+import Control.Monad.State (evalState)
+import System.Path (splitExt)
+import Text.PrettyPrint (render)
+import Data.Supply
+import System.Environment (getArgs, getProgName)
     
 mkIds :: IO (Supply TvId)
 mkIds = newEnumSupply
@@ -31,8 +34,19 @@ compileFile filename = do
                                                             mpl = evalState (compile tprog) mkCompilerState
                                                         return $ Just mpl
 
-test = do compileRes <- compileFile filename
-          case compileRes of
-            Nothing -> return ()
-            Just mpl -> print $ unparse mpl
-    where filename = "lorentey-c++-tmp.hs"
+main' filename = do putStrLn $ unwords ["Compiling", filename]
+                    compileRes <- compileFile filename
+                    case compileRes of
+                      Nothing -> return ()
+                      Just mpl -> do putStrLn $ unwords ["Creating", filename']
+                                     writeFile filename' $ render $ unparse mpl
+    where (fname, ext) = splitExt filename
+          filename' = (if ext == ".kiff" then fname else filename) ++ ".cc"
+                                                                       
+test = main' "lorentey-c++-tmp.kiff"
+
+main = do args <- getArgs          
+          case args of
+            [filename] -> main' filename
+            _ -> do progname <- getProgName
+                    error $ unwords ["Usage:", progname, "inputfile.kiff"]

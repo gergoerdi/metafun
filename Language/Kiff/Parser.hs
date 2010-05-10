@@ -15,7 +15,7 @@ import Data.Either
 
 import Debug.Trace        
 lexer = T.makeTokenParser $ L.haskellStyle {
-          T.reservedNames = ["if", "then", "else", "True", "False", "let", "in", "data", "type"],
+          T.reservedNames = ["if", "then", "else", "True", "False", "let", "in", "data", "type", "lambda"],
           T.reservedOpNames = ["::", "->", "=", "\\", "_", "|",
                                "*", "/", "+", "-", "%",
                                "!", "&&", "||",
@@ -99,7 +99,7 @@ expr = buildExpressionParser table term <?> "expression"
           con = do c <- conname
                    return $ Con () c
 
-          lam = do reservedOp "\\"
+          lam = do reservedOp "\\" <|> reserved "lambda"
                    pats <- many1 (try pat)
                    reservedOp "->"
                    body <- expr
