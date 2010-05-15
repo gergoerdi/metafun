@@ -51,9 +51,6 @@ instance (Unparse Field) where
 
 instance (Unparse Expr) where
     unparse (Typename expr)            = text "typename" <+> unparse expr
-    unparse (Box TyInt expr)           = unparse $ Cons "Int" [expr]
-    unparse (Box TyBool expr)          = unparse $ Cons "Bool" [expr]
-    unparse (Unbox expr)               = unparse expr <> text "::v"
     unparse (VarRef v)                 = varname v              
     unparse (Cons cons [])             = varname cons
     unparse (Cons cons args)           = varname cons <> anglelist (map unparse args)
@@ -61,9 +58,13 @@ instance (Unparse Expr) where
     unparse (IntLit i)                 = int i
     unparse (BoolLit True)             = text "true"
     unparse (BoolLit False)            = text "false"
+    unparse (Cond cond thn els)        = parens (unparse cond) <+> text "?" <+> parens (unparse thn) <+> colon <+> parens (unparse els)
     unparse (PrimBinOp op left right)  = parens (unparse left) <+> unparse op <+> parens (unparse right)
     unparse (Not expr)                 = text "!" <> parens (unparse expr)
     unparse (UnaryMinus expr)          = parens $ text "-" <> parens (unparse expr)
+    unparse (Box TyInt expr)           = unparse $ Cons "Int" [expr]
+    unparse (Box TyBool expr)          = unparse $ Cons "Bool" [expr]
+    unparse (Unbox expr)               = unparse expr <> text "::v"
                                          
 instance (Unparse PrimitiveOp) where
     unparse OpAdd  = text "+"

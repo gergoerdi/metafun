@@ -25,6 +25,7 @@ data Expr  = Typename Expr
            | VarRef Name
            | BoolLit Bool
            | IntLit Int
+           | Cond Expr Expr Expr
            | UnaryMinus Expr
            | PrimBinOp PrimitiveOp Expr Expr
            | Not Expr

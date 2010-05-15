@@ -27,9 +27,9 @@ compile (Kiff.Program typeDecls defs) = do mapM_ output platformDefs
           builtinTys = [Kiff.DataDecl "list" ["a"] [nil, cons]]
               where nil = Kiff.DataCon "nil" []
                     cons = Kiff.DataCon "cons" [Kiff.TyVar (Kiff.TvName "a"), Kiff.TyList $ Kiff.TyVar (Kiff.TvName "a")]
-                                            
+
 compileDef :: TDef -> Compiler ()
-compileDef def@(Kiff.Def _ name _ eqs) = do name' <- liftM (fromMaybe (id name)) $ lookupLiftedName name
+compileDef def@(Kiff.Def _ name _ eqs) = do name' <- liftM (fromMaybe (convertName name)) $ lookupLiftedName name
                                             mtys <- compileDefDecl def
                                             specs <- mapM compileDefEq eqs
                                             output $ MPL.Def name' mtys specs
@@ -126,7 +126,10 @@ compileExpr (Kiff.PrimBinOp tau op left right)  = do left' <- liftM unbox $ comp
                                                      right' <- liftM unbox $ compileExpr right
                                                      let op' = compileOp op
                                                      return $ MPL.Box (convertTy tau) $ MPL.PrimBinOp op' left' right'         
-compileExpr (Kiff.IfThenElse _ cond thn els)    = error "TODO: if_then_else"
+compileExpr (Kiff.IfThenElse _ cond thn els)    = do cond' <- compileExpr cond
+                                                     thn' <- compileExpr thn
+                                                     els' <- compileExpr els
+                                                     return $ MPL.Cond cond' thn' els'
 compileExpr (Kiff.IntLit _ n)                   = return $ MPL.Box MPL.TyInt $ MPL.IntLit n
 compileExpr (Kiff.BoolLit _ b)                  = return $ MPL.Box MPL.TyBool $ MPL.BoolLit b
 compileExpr (Kiff.UnaryMinus _ e)               = do e' <- compileExpr e
@@ -154,3 +157,7 @@ compileOp Kiff.OpOr  = MPL.OpOr
                        
 uncurryTy (Kiff.TyFun t t')  = (t:uncurryTy t')
 uncurryTy t                  = [t]
+
+convertName :: Kiff.VarName -> MPL.Name
+convertName = id
+               
