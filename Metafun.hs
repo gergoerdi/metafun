@@ -1,4 +1,4 @@
-module Metafun where
+module Main where
 
 import Metafun.Compiler
 import Metafun.Compiler.State
