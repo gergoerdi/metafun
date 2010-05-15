@@ -3,7 +3,9 @@ module Metafun where
 import Metafun.Compiler
 import Metafun.Compiler.State
     
-import Language.Kiff.Syntax
+import qualified Language.Kiff.Syntax as Kiff
+import qualified Language.CxxMPL.Syntax as MPL
+
 import Language.Kiff.Parser
 import Language.Kiff.Typing
 import Language.Kiff.Typing.Infer
@@ -15,7 +17,7 @@ import Text.PrettyPrint (render)
 import Data.Supply
 import System.Environment (getArgs, getProgName)
     
-mkIds :: IO (Supply TvId)
+mkIds :: IO (Supply Kiff.TvId)
 mkIds = newEnumSupply
 
 compileFile filename = do
@@ -23,16 +25,17 @@ compileFile filename = do
   case parseRes of
     Left errors -> do print errors
                       return Nothing
-    Right prog@(Program decls defs) -> do
-                            ids <- mkIds
-                            let (ids', ids'') = split2 ids
-                                ctx = mkCtx ids'
-                            case inferDefs ids'' ctx defs of
-                              Left errors -> do putStrLn $ unlines $ map show errors
-                                                return Nothing
-                              Right (ctx', tdefs) -> do let tprog = Program decls tdefs
-                                                            mpl = evalState (compile tprog) mkCompilerState
-                                                        return $ Just mpl
+    Right prog@(Kiff.Program decls defs) -> do
+                         ids <- mkIds
+                         let (ids', ids'') = split2 ids
+                             ctx = mkCtx ids'
+                         case inferDefs ids'' ctx defs of
+                           Left errors -> do putStrLn $ unlines $ map show errors
+                                             return Nothing
+                           Right (ctx', tdefs) -> do let tprog = Kiff.Program decls tdefs
+                                                         defs = runCompiler (compile tprog)
+                                                         mpl = MPL.Program defs
+                                                     return $ Just mpl
 
 main' filename = do putStrLn $ unwords ["Compiling", filename]
                     compileRes <- compileFile filename
