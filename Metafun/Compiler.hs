@@ -118,9 +118,9 @@ compileExpr e@(Kiff.App _ f x)                  = do args' <- mapM compileExpr a
                                                        Kiff.Con tau con -> return $ MPL.Cons con args'
     where (fun:args) = uncurryApp e         
 compileExpr (Kiff.Lam _ pats body)              = error "Lambdas not supported"
-compileExpr (Kiff.Let _ defs body)              = do withLiftedNames names $ do
-                                                       mapM compileDef defs
-                                                       compileExpr body
+compileExpr (Kiff.Let _ defs body)              = withLiftedNames names $ do
+                                                    mapM_ compileDef defs
+                                                    compileExpr body
     where names = map (\ (Kiff.Def _ name _ _) -> name) defs                                                                
 compileExpr (Kiff.PrimBinOp tau op left right)  = do left' <- liftM unbox $ compileExpr left
                                                      right' <- liftM unbox $ compileExpr right
