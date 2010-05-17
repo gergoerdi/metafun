@@ -23,7 +23,8 @@ infer (Program decls defs) = runTyping $ do
                                return $ Program decls defs'
     where cons = concatMap toEntries decls
           toEntries (DataDecl name tvs datacons) = map toEntry datacons
-              where toEntry (DataCon con tys) = (con, tyFun tys ++ (tyApp (TyCon name):tvs)
+              where tvars = map (TyVar . TvName) tvs
+                    toEntry (DataCon con tys) = (con, tyFun $ tys ++ [tyApp $ (TyData name):tvars])
         
 inferGroup :: [Def ()] -> Typing [Def Ty]
 inferGroup defs = do newVars <- mapM mkVar defs
