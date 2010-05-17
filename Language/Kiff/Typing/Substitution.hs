@@ -1,4 +1,4 @@
-module Language.Kiff.Typing.Substitution (Subst, empty, add, xform) where
+module Language.Kiff.Typing.Substitution (Subst, empty, add, subst) where
 
 import Language.Kiff.Syntax
 import qualified Data.Map as Map
@@ -11,13 +11,13 @@ add :: Subst -> Tv -> Ty -> Subst
 add (Subst m) v t = Subst $ Map.insert v t m
 
                       
-xform :: Subst -> Ty -> Ty
-xform s t@(TyData _)       = t
-xform s t@(TyPrimitive _)  = t
-xform s (TyFun t u)        = TyFun (xform s t) (xform s u)
-xform s (TyApp t u)        = TyApp (xform s t) (xform s u)
-xform s (TyList t)         = TyList (xform s t)
-xform s (TyVar v)          = case Map.lookup v m of
+subst :: Subst -> Ty -> Ty
+subst s t@(TyData _)       = t
+subst s t@(TyPrimitive _)  = t
+subst s (TyFun t u)        = TyFun (subst s t) (subst s u)
+subst s (TyApp t u)        = TyApp (subst s t) (subst s u)
+subst s (TyList t)         = TyList (subst s t)
+subst s (TyVar v)          = case Map.lookup v m of
                                Nothing -> TyVar v
-                               Just t  -> xform s t
+                               Just t  -> subst s t
     where Subst m = s

@@ -2,55 +2,31 @@ module Language.Kiff.Typing.Instantiate (instantiate) where
 
 import Language.Kiff.Syntax
 import Language.Kiff.Typing
-
+import Language.Kiff.Typing.State
+    
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Supply
 import Control.Monad.State
 
-data St = St { tvmap :: Map.Map Tv Tv,
-               ctx :: Ctx,
-               ids :: Supply TvId}        
+type TvMap = Map.Map Tv Tv
+              
+type Instantiate = StateT TvMap Typing
+    
+getTv :: Tv -> Instantiate (Maybe Tv)
+getTv v = liftM (Map.lookup v) get
 
-mkSt :: Supply TvId -> Ctx -> St
-mkSt ids ctx = St { tvmap = Map.empty,
-                    ctx = ctx,
-                    ids = ids }
+ensureTv :: Tv -> Instantiate Tv
+ensureTv tv = do lookup <- getTv tv
+                 case lookup of
+                   Just tv' -> return tv'
+                   Nothing -> inst tv
+    where inst tv = do tv' <- lift mkTv
+                       modify (Map.insert tv tv')
+                       return tv'
 
-type Inst a = State St a
-
-mkId :: Inst Tv
-mkId = do st@St{ids = ids} <- get
-          let (ids', ids'') = split2 ids
-          put st{ids = ids'}
-          return $ TvId $ supplyValue ids''
-
-getTv :: Tv -> Inst (Maybe Tv)
-getTv v = do tvmap <- liftM tvmap get
-             return $ Map.lookup v tvmap
-
-instTv :: Tv -> Inst Tv
-instTv v = do st@St{ tvmap = tvmap, ids = ids} <- get
-              id' <- mkId
-              put st{tvmap = Map.insert v id' tvmap}
-              return id'
-
-ensureTv :: Tv -> Inst Tv
-ensureTv v = do lookup <- getTv v
-                case lookup of
-                  Just v' -> return v'
-                  Nothing -> instTv v
-
-
-isMonoVar :: Tv -> Inst Bool
-isMonoVar v = do St{ctx = ctx} <- get
-                 return $ any (occurs v) (monoTys ctx)
-    where monoTys ctx = mapMaybe unpack $ Map.elems (varmap ctx)
-              where unpack (Poly _) = Nothing
-                    unpack (Mono tau) = Just tau
-                             
-instantiateM :: Ty -> Inst Ty
-instantiateM (TyVar v)     = do mono <- isMonoVar v
+instantiateM :: Ty -> Instantiate Ty
+instantiateM (TyVar v)     = do mono <- lift $ isMonoVar v
                                 if mono
                                    then return $ TyVar v
                                    else liftM TyVar $ ensureTv v
@@ -63,6 +39,6 @@ instantiateM (TyApp t u)   = do t' <- instantiateM t
 instantiateM (TyList t)    = do t' <- instantiateM t
                                 return $ TyList t'
 instantiateM ty            = return ty
-           
-instantiate :: Supply TvId -> Ctx -> Ty -> Ty
-instantiate ids ctx ty = evalState (instantiateM ty) (mkSt ids ctx)
+
+instantiate :: Ty -> Typing Ty
+instantiate ty = evalStateT (instantiateM ty) (Map.empty)

@@ -17,8 +17,8 @@ newtype Compiler a = Compiler (RWS Scope [MPL.Def] Serial a)
     deriving (Monad, MonadReader Scope, MonadWriter [MPL.Def], MonadState Serial)
 
 runCompiler :: Compiler () -> [MPL.Def]
-runCompiler (Compiler rws) = let (_, state, result) = (runRWS rws) (Scope Map.empty []) (Serial 0)
-                             in result
+runCompiler (Compiler rws) = let (_, state, product) = (runRWS rws) (Scope Map.empty []) (Serial 0)
+                             in product
 
 output :: MPL.Def -> Compiler ()
 output def = tell [def]

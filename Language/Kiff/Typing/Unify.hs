@@ -39,7 +39,7 @@ unify' leftOnly  ((t :=: t'):eqs)  = process $ unifyEq t t'
           process (Substitute x t)  = case unify' leftOnly eqs' of
                                         Left es -> Left es
                                         Right s -> Right $ add s x t
-              where eqs' = map (\ (t :=: t') -> (xform s t) :=: (xform s t')) eqs
+              where eqs' = map (\ (t :=: t') -> (subst s t) :=: (subst s t')) eqs
                         where s = add empty x t
 
           addError e = case unify' leftOnly eqs of

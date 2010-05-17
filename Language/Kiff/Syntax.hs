@@ -8,7 +8,7 @@ data DefEq tag = DefEq tag [Pat tag] (Expr tag) deriving Show
 
 type DataName = String
 type TvName = String
-type TvId = Int
+type TvId = Integer
     
 data TyPrimitive  = TyInt
                   | TyBool
