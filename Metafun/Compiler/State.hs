@@ -1,5 +1,10 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Metafun.Compiler.State (Compiler, runCompiler, newVar, getScopeVars, withScopeVars, lookupLiftedName, withLiftedNames, output) where
+module Metafun.Compiler.State
+    (Compiler, runCompiler,
+     newVar,
+     getScopeVars, withScopeVars,
+     lookupLiftedName, withLiftedNames,
+     output) where
 
 import Control.Monad.RWS
 import Control.Monad
@@ -13,35 +18,34 @@ newtype Serial = Serial Integer deriving Show
 data Scope = Scope { liftedMap :: Map.Map Kiff.VarName MPL.Name,
                      scope :: [MPL.MetaVarDecl] }
                    
-newtype Compiler a = Compiler (RWS Scope [MPL.Def] Serial a)
-    deriving (Monad, MonadReader Scope, MonadWriter [MPL.Def], MonadState Serial)
+newtype Compiler a = Compiler {rws :: RWS Scope [MPL.Def] Serial a} deriving Monad
 
 runCompiler :: Compiler () -> [MPL.Def]
 runCompiler (Compiler rws) = let (_, state, product) = (runRWS rws) (Scope Map.empty []) (Serial 0)
                              in product
 
 output :: MPL.Def -> Compiler ()
-output def = tell [def]
+output def = Compiler $ tell [def]
                              
 fresh :: Compiler Integer
-fresh = do Serial i <- get
-           put (Serial (succ i))
-           return i
+fresh = Compiler $ do Serial i <- get
+                      put (Serial (succ i))
+                      return i
 
 newVar :: Compiler MPL.Name
 newVar = do i <- fresh
             return $ "_v" ++ (show i)
 
 withScopeVars :: [MPL.MetaVarDecl] -> Compiler a -> Compiler a
-withScopeVars vars compiler = local addVars compiler
+withScopeVars vars = Compiler . local addVars . rws
     where addVars s@Scope{scope = scope} = s{scope = vars ++ scope}
 
 getScopeVars :: Compiler [MPL.MetaVarDecl]
-getScopeVars = do Scope{scope = scope} <- ask
-                  return scope
+getScopeVars = Compiler $ do Scope{scope = scope} <- ask
+                             return scope
 
 getLiftedMap :: Compiler (Map.Map Kiff.VarName MPL.Name)
-getLiftedMap = liftM liftedMap ask
+getLiftedMap = Compiler $ liftM liftedMap ask
                                     
 lookupLiftedName :: Kiff.VarName -> Compiler (Maybe MPL.Name)
 lookupLiftedName v = do liftedMap <- getLiftedMap
@@ -53,6 +57,6 @@ mkLiftedName v = do i <- fresh
 
 withLiftedNames :: [Kiff.VarName] -> Compiler a -> Compiler a
 withLiftedNames vs compiler = do vs' <- mapM mkLiftedName vs
-                                 local (addLifted (zip vs vs')) compiler
+                                 Compiler $ local (addLifted (zip vs vs')) (rws compiler)
     where addLifted newLifts s@Scope{liftedMap = liftedMap} = s{liftedMap = Map.union liftedMap $ Map.fromList newLifts}
                                            

@@ -28,7 +28,7 @@ infer (Program decls defs) = runTyping $ do
         
 inferGroup :: [Def ()] -> Typing [Def Ty]
 inferGroup defs = do newVars <- mapM mkVar defs
-                     (defs', eqs) <- listen $ withMonoVars newVars $ mapM collectDef defs
+                     (defs', eqs) <- collectEqs $ withMonoVars newVars $ mapM collectDef defs
                      case unify eqs of
                        Left errs -> error (show errs) -- TODO: errors
                        Right s   -> mapM (checkDecl . fmap (subst s)) defs'
@@ -57,7 +57,7 @@ inferDefs defs typing = inferGroups defgroups
 collectDef :: Def () -> Typing (Def Ty)
 collectDef (Def _ name decl defeqs) = do tau <- mkTyVar
                                          tdefeqs <- mapM collectDefEq defeqs
-                                         tell $ map (\ tdefeq -> (tau :=: getTy tdefeq)) tdefeqs
+                                         yieldEqs $ map (\ tdefeq -> (tau :=: getTy tdefeq)) tdefeqs
                                          return $ Def tau name decl tdefeqs
               
 collectDefEq :: DefEq () -> Typing (DefEq Ty)
@@ -82,7 +82,7 @@ collectExpr (Con _ con)                 = do tyCon <- lookupCon con
 collectExpr (App _ f x)                 = do f' <- collectExpr f
                                              x' <- collectExpr x
                                              tau <- mkTyVar
-                                             tell [getTy f' :=: TyFun (getTy x') tau]
+                                             yieldEqs [getTy f' :=: TyFun (getTy x') tau]
                                              return $ App tau f' x'                                    
 collectExpr (PrimBinOp _ op left right) = do alpha <- mkTyVar
                                              left' <- collectExpr left
@@ -91,24 +91,24 @@ collectExpr (PrimBinOp _ op left right) = do alpha <- mkTyVar
                                                  tRight = getTy right'
                                                  tau = tyFun [TyPrimitive t1, TyPrimitive t2, TyPrimitive t3]
                                                  tau' = tyFun [tLeft, tRight, alpha]
-                                             tell [tau :=: tau']
+                                             yieldEqs [tau :=: tau']
                                              return $ PrimBinOp alpha op left' right'
     where (t1, t2, t3) = typeOfOp op                       
 collectExpr (IfThenElse _ cond thn els) = do cond' <- collectExpr cond
                                              thn' <- collectExpr thn
                                              els' <- collectExpr els
                                              alpha <- mkTyVar
-                                             tell [getTy cond' :=: TyPrimitive TyBool, getTy thn' :=: alpha, getTy els' :=: alpha]
+                                             yieldEqs [getTy cond' :=: TyPrimitive TyBool, getTy thn' :=: alpha, getTy els' :=: alpha]
                                              return $ IfThenElse alpha cond' thn' els'
 collectExpr (IntLit _ n)                = return $ IntLit (TyPrimitive TyInt) n
 collectExpr (BoolLit _ b)               = return $ BoolLit (TyPrimitive TyBool) b
 collectExpr (UnaryMinus _ e)            = do e' <- collectExpr e
                                              let tau = getTy e'
-                                             tell [tau :=: TyPrimitive TyInt]
+                                             yieldEqs [tau :=: TyPrimitive TyInt]
                                              return $ UnaryMinus (TyPrimitive TyInt) e'
 collectExpr (Not _ e)                   = do e' <- collectExpr e
                                              let tau = getTy e'
-                                             tell [tau :=: TyPrimitive TyBool]
+                                             yieldEqs [tau :=: TyPrimitive TyBool]
                                              return $ Not (TyPrimitive TyBool) e'
 collectExpr (Lam _ pats body)           = do (pats', body') <- inferPats pats $ collectExpr body
                                              let tPats = map getTy pats'
@@ -141,7 +141,7 @@ collectPat (PApp _ con pats) = do tyCon <- lookupCon con
                                     Just tau -> do (tpats, binds) <- collectPats pats                                                                 
                                                    let ts = map getTy tpats
                                                    alpha <- mkTyVar
-                                                   tell [tau :=: tyFun (ts ++ [alpha])]
+                                                   yieldEqs [tau :=: tyFun (ts ++ [alpha])]
                                                    return (PApp alpha con tpats, binds)
                                                   
 intOp = (TyInt, TyInt, TyInt)                                                                        
