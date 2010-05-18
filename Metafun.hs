@@ -40,12 +40,12 @@ main' filename = do putStrLn $ unwords ["Compiling", filename]
                     case compileRes of
                       Nothing -> return ()
                       Just mpl -> do putStrLn $ unwords ["Creating", filename']
-                                     -- writeFile filename' $ render $ unparse mpl
-                                     putStrLn $ render $ unparse mpl
+                                     writeFile filename' $ render $ unparse mpl
+                                     -- putStrLn $ render $ unparse mpl
     where (fname, ext) = splitExt filename
           filename' = (if ext == ".kiff" then fname else filename) ++ ".cc"
                                                                        
-test = main' "lorentey-c++-tmp.kiff"
+test = main' "test/lorentey-c++-tmp.kiff"
 
 main = do args <- getArgs          
           case args of

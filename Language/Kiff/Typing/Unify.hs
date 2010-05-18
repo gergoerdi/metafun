@@ -1,14 +1,10 @@
-module Language.Kiff.Typing.Unify (UnificationError(..), unify, fitDecl) where
+module Language.Kiff.Typing.Unify (unify, fitDecl) where
 
 import Language.Kiff.Syntax
 import Language.Kiff.Typing
+import Language.Kiff.Typing.Errors
 import Language.Kiff.Typing.Substitution
     
-data UnificationError  = InfiniteType Ty Ty
-                       | Unsolvable Ty Ty
-                       | CantFitDecl Ty Ty
-                       deriving Show
-
 data Unification  = Skip
                   | Incongruent
                   | Flip Unification
