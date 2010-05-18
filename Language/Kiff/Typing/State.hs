@@ -9,7 +9,11 @@ module Language.Kiff.Typing.State
 
 import Language.Kiff.Syntax
 import Language.Kiff.Typing
+import Language.Kiff.Typing.Errors
+    
 import Control.Monad.RWS
+import Control.Monad.Error
+    
 import qualified Data.Map as Map    
 import Data.Maybe
     
@@ -21,7 +25,7 @@ data Ctx = Ctx { conmap :: Map.Map DataName Ty,
                  varmap :: Map.Map VarName VarBind }
            deriving Show
 
-newtype Typing a = Typing {rws :: RWS Ctx [TyEq] TvId a} deriving Monad
+newtype Typing a = Typing {erws :: ErrorT TypingError (RWS Ctx [TyEq] TvId) a} deriving (Monad, MonadError TypingError)
 
 lookupVar :: VarName -> Typing (Maybe VarBind)
 lookupVar v = Typing $ do varmap <- asks varmap
@@ -39,9 +43,8 @@ mkTv = Typing $ do i <- get
 mkTyVar :: Typing Ty
 mkTyVar = liftM TyVar mkTv
 
-runTyping :: Typing a -> a
-runTyping typing = let Typing rws = typing'
-                       (result, _, _) = (runRWS rws) ctx 0
+runTyping :: Typing a -> Either TypingError a
+runTyping typing = let (result, _, _) = (runRWS . runErrorT) (erws typing') ctx 0
                    in result
     where ctx = Ctx{conmap=Map.empty, varmap=Map.empty}
           typing' = do alpha <- mkTyVar
@@ -58,10 +61,10 @@ runTyping typing = let Typing rws = typing'
 --           tyList = TyList (TyVar (TvId i))
 
 withCons :: [(VarName, Ty)] -> Typing a -> Typing a
-withCons cons = Typing . local (\ ctx@Ctx{conmap = conmap} -> ctx{conmap = conmap `Map.union` (Map.fromList cons)}) . rws
+withCons cons = Typing . local (\ ctx@Ctx{conmap = conmap} -> ctx{conmap = conmap `Map.union` (Map.fromList cons)}) . erws
 
 withVars :: [(VarName, VarBind)] -> Typing a -> Typing a
-withVars binds = Typing . local (\ ctx@Ctx{varmap = varmap} -> ctx{varmap = varmap `Map.union` (Map.fromList binds)}) . rws
+withVars binds = Typing . local (\ ctx@Ctx{varmap = varmap} -> ctx{varmap = varmap `Map.union` (Map.fromList binds)}) . erws
 
 withMonoVars :: [(VarName, Ty)] -> Typing a -> Typing a
 withMonoVars binds = withVars $ map (\ (name, ty) -> (name, Mono ty)) binds
@@ -77,7 +80,7 @@ isMonoVar tv = Typing $ do ctx  <- ask
                     unpack (Mono tau) = Just tau
 
 collectEqs :: Typing a -> Typing (a, [TyEq])
-collectEqs = Typing . listen . rws
+collectEqs = Typing . listen . erws
 
 yieldEqs :: [TyEq] -> Typing ()
 yieldEqs = Typing . tell

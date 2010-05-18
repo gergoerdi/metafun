@@ -20,9 +20,9 @@ data Scope = Scope { liftedMap :: Map.Map Kiff.VarName MPL.Name,
                    
 newtype Compiler a = Compiler {rws :: RWS Scope [MPL.Def] Serial a} deriving Monad
 
-runCompiler :: Compiler () -> [MPL.Def]
-runCompiler (Compiler rws) = let (_, state, product) = (runRWS rws) (Scope Map.empty []) (Serial 0)
-                             in product
+runCompiler :: Compiler () -> MPL.Program
+runCompiler (Compiler rws) = let (_, state, output) = (runRWS rws) (Scope Map.empty []) (Serial 0)
+                             in MPL.Program output
 
 output :: MPL.Def -> Compiler ()
 output def = Compiler $ tell [def]

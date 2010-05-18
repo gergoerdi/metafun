@@ -2,6 +2,7 @@ module Language.Kiff.Typing.Infer (infer) where
 
 import Language.Kiff.Syntax
 import Language.Kiff.Typing
+import Language.Kiff.Typing.Errors
 import Language.Kiff.Typing.Substitution
 import Language.Kiff.Typing.Unify
 import Language.Kiff.Typing.Instantiate
@@ -11,13 +12,12 @@ import Language.Kiff.CallGraph
 import qualified Data.Map as Map
 import Data.Either
 import Control.Monad
-import Control.Monad.Reader
-import Control.Monad.Writer
+import Control.Monad.Error
     
 getTy :: Tagged e => e Ty -> Ty    
 getTy e = getTag e    
 
-infer :: Program () -> Program Ty
+infer :: Program () -> Either TypingError (Program Ty)
 infer (Program decls defs) = runTyping $ do
                                (defs', ()) <- withCons cons $ inferDefs defs $ return ()
                                return $ Program decls defs'
@@ -30,7 +30,7 @@ inferGroup :: [Def ()] -> Typing [Def Ty]
 inferGroup defs = do newVars <- mapM mkVar defs
                      (defs', eqs) <- collectEqs $ withMonoVars newVars $ mapM collectDef defs
                      case unify eqs of
-                       Left errs -> error (show errs) -- TODO: errors
+                       Left err -> throwError err
                        Right s   -> mapM (checkDecl . fmap (subst s)) defs'
                        
     where mkVar (Def _ name _ _) = do tau <- mkTyVar
@@ -39,8 +39,8 @@ inferGroup defs = do newVars <- mapM mkVar defs
           checkDecl :: Def Ty -> Typing (Def Ty)
           checkDecl def@(Def tau name Nothing defeqs) = return def
           checkDecl (Def tau name (Just tau') defeqs) =  case fitDecl tau' tau of
-                                                       Left errs  -> error (show errs) -- TODO: errors
-                                                       Right s    -> return $ Def tau' name (Just tau') (map (fmap $ subst s) defeqs)
+                                                       Left err  -> throwError $ CantFitDecl name tau tau'
+                                                       Right s   -> return $ Def tau' name (Just tau') (map (fmap $ subst s) defeqs)
           
 inferDefs :: [Def ()] -> Typing a -> Typing ([Def Ty], a)
 inferDefs defs typing = inferGroups defgroups
