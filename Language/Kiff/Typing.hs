@@ -2,8 +2,6 @@
 module Language.Kiff.Typing where
 
 import Language.Kiff.Syntax
-import Control.Monad.RWS
-import qualified Data.Map as Map    
 
 data TyEq = Ty :=: Ty deriving Show
           

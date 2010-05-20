@@ -28,12 +28,10 @@ data Ctx = Ctx { conmap :: Map.Map DataName Ty,
 newtype Typing a = Typing {erws :: ErrorT TypingError (RWS Ctx [TyEq] TvId) a} deriving (Monad, MonadError TypingError)
 
 lookupVar :: VarName -> Typing (Maybe VarBind)
-lookupVar v = Typing $ do varmap <- asks varmap
-                          return $ Map.lookup v varmap
+lookupVar v = Typing $ asks (Map.lookup v . varmap)
 
 lookupCon :: ConName -> Typing (Maybe Ty)
-lookupCon c = Typing $ do conmap <- asks conmap
-                          return $ Map.lookup c conmap
+lookupCon c = Typing $ asks (Map.lookup c . conmap)
                         
 mkTv :: Typing Tv
 mkTv = Typing $ do i <- get
@@ -52,14 +50,6 @@ runTyping typing = let (result, _, _) = (runRWS . runErrorT) (erws typing') ctx 
                            cons = ("cons", tyFun [alpha, TyList alpha, TyList alpha])
                        withCons [nil, cons] typing
                 
--- mkCtx :: Supply TvId -> Ctx
--- mkCtx ids = Ctx { conmap = Map.fromList [("nil", tyList),
---                                          ("cons", tyFun [TyVar (TvId i), tyList, tyList])],
---                   varmap = Map.fromList [("not",  (Poly $ tyFun [TyPrimitive TyBool, TyPrimitive TyBool]))]
---                 }
---     where i = supplyValue ids
---           tyList = TyList (TyVar (TvId i))
-
 withCons :: [(VarName, Ty)] -> Typing a -> Typing a
 withCons cons = Typing . local (\ ctx@Ctx{conmap = conmap} -> ctx{conmap = conmap `Map.union` (Map.fromList cons)}) . erws
 
