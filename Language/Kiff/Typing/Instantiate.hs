@@ -6,7 +6,6 @@ import Language.Kiff.Typing.State
     
 import qualified Data.Map as Map
 import Data.Maybe
-import Data.Supply
 import Control.Monad.State
 
 type TvMap = Map.Map Tv Tv

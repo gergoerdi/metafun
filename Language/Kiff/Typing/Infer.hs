@@ -38,9 +38,9 @@ inferGroup defs = do newVars <- mapM mkVar defs
                                              
           checkDecl :: Def Ty -> Typing (Def Ty)
           checkDecl def@(Def tau name Nothing defeqs) = return def
-          checkDecl (Def tau name (Just tau') defeqs) =  case fitDecl tau' tau of
-                                                       Left err  -> throwError $ CantFitDecl name tau tau'
-                                                       Right s   -> return $ Def tau' name (Just tau') (map (fmap $ subst s) defeqs)
+          checkDecl (Def tau name (Just tau') defeqs) = case fitDecl tau' tau of
+                                                           Left err  -> throwError $ CantFitDecl name tau tau'
+                                                           Right s   -> return $ Def tau' name (Just tau') (map (fmap $ subst s) defeqs)
           
 inferDefs :: [Def ()] -> Typing a -> Typing ([Def Ty], a)
 inferDefs defs typing = inferGroups defgroups
