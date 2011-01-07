@@ -122,10 +122,10 @@ compileExpr (Kiff.Let _ defs body)              = withLiftedNames names $ do
                                                     mapM_ compileDef defs
                                                     compileExpr body
     where names = map (\ (Kiff.Def _ name _ _) -> name) defs                                                                
-compileExpr (Kiff.PrimBinOp tau op left right)  = do left' <- liftM unbox $ compileExpr left
-                                                     right' <- liftM unbox $ compileExpr right
-                                                     let op' = compileOp op
-                                                     return $ MPL.Box (convertTy tau) $ MPL.PrimBinOp op' left' right'         
+compileExpr (Kiff.PrimBinOp τ op left right)  = do left' <- liftM unbox $ compileExpr left
+                                                   right' <- liftM unbox $ compileExpr right
+                                                   let op' = compileOp op
+                                                   return $ MPL.Box (convertTy τ) $ MPL.PrimBinOp op' left' right'         
 compileExpr (Kiff.IfThenElse _ cond thn els)    = do cond' <- compileExpr cond
                                                      thn' <- compileExpr thn
                                                      els' <- compileExpr els
