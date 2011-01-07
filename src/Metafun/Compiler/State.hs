@@ -18,7 +18,7 @@ newtype Serial = Serial Integer deriving Show
 data Scope = Scope { liftedMap :: Map.Map Kiff.VarName MPL.Name,
                      scope :: [MPL.MetaVarDecl] }
                    
-newtype Compiler a = Compiler {rws :: RWS Scope [MPL.Def] Serial a} deriving Monad
+newtype Compiler a = Compiler { unCompiler :: RWS Scope [MPL.Def] Serial a} deriving Monad
 
 runCompiler :: Compiler () -> MPL.Program
 runCompiler (Compiler rws) = let (_, state, output) = (runRWS rws) (Scope Map.empty []) (Serial 0)
@@ -37,7 +37,7 @@ newVar = do i <- fresh
             return $ "_v" ++ (show i)
 
 withScopeVars :: [MPL.MetaVarDecl] -> Compiler a -> Compiler a
-withScopeVars vars = Compiler . local addVars . rws
+withScopeVars vars = Compiler . local addVars . unCompiler
     where addVars s@Scope{scope = scope} = s{scope = vars ++ scope}
 
 getScopeVars :: Compiler [MPL.MetaVarDecl]
@@ -57,6 +57,6 @@ mkLiftedName v = do i <- fresh
 
 withLiftedNames :: [Kiff.VarName] -> Compiler a -> Compiler a
 withLiftedNames vs compiler = do vs' <- mapM mkLiftedName vs
-                                 Compiler $ local (addLifted (zip vs vs')) (rws compiler)
+                                 Compiler $ local (addLifted (zip vs vs')) (unCompiler compiler)
     where addLifted newLifts s@Scope{liftedMap = liftedMap} = s{liftedMap = Map.union liftedMap $ Map.fromList newLifts}
                                            

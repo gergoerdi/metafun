@@ -13,7 +13,8 @@ import Control.Monad
 import Data.Char
 import Data.Either
 
-import Debug.Trace        
+import Control.Applicative ((<$>)) -- IndentParser uses Parsec 2, which doesn't expose an Applicative instance...
+
 lexer = T.makeTokenParser $ L.haskellStyle {
           T.reservedNames = ["if", "then", "else", "True", "False", "let", "in", "data", "type", "lambda"],
           T.reservedOpNames = ["::", "->", "=", "\\", "_", "|",
@@ -35,10 +36,10 @@ identifier = IT.identifier lexer
 whiteSpace = IT.whiteSpace lexer
 symbol     = IT.symbol lexer
              
-conname = do name@(n:ns) <- identifier
+conname = do name@(n:_) <- identifier
              if isUpper n then return name else fail []
 
-varname = do name@(n:ns) <- identifier
+varname = do name@(n:_) <- identifier
              if isLower n then return name else fail []
 
 boollit = (reserved "True" >> return True) <|>
@@ -50,15 +51,9 @@ ty = do tys <- ty' `sepBy1` (reservedOp "->")
               where  table = [[Infix (whiteSpace >> return TyApp) AssocRight]]
                      term =  parens ty <|> listTy <|> try primitiveTy <|> try tyVar <|> dataTy
 
-                     listTy = do tyElem <- brackets ty
-                                 return $ TyList tyElem
-
-                     tyVar = do tv <- varname
-                                return $ TyVar (TvName tv)
-
-                     dataTy = do con <- conname
-                                 return $ TyData con
-                     
+                     listTy = TyList <$> brackets ty
+                     tyVar = TyVar <$> TvName <$> varname
+                     dataTy = TyData <$> conname                     
                      primitiveTy = (reserved "Int" >> return (TyPrimitive TyInt)) <|>
                                    (reserved "Bool" >> return (TyPrimitive TyBool))
                                    
@@ -88,16 +83,10 @@ expr = buildExpressionParser table term <?> "expression"
           list = do elems <- brackets $ expr `sepBy` comma
                     return $ foldr (\x xs -> App () (App () (Con () "cons") x) xs) (Con () "nil") elems
                  
-          intLit = do n <- natural -- TODO: integer fsck up "-" and "+"
-                      return $ IntLit () (fromInteger n)
-                             
-          boolLit = liftM (BoolLit ()) boollit
-
-          varref = do var <- varname
-                      return $ Var () var
-
-          con = do c <- conname
-                   return $ Con () c
+          intLit = IntLit () <$> fromInteger <$> natural -- TODO: integerl fscks up "-" and "+"                             
+          boolLit = BoolLit () <$> boollit
+          varref = Var () <$> varname
+          con = Con () <$> conname
 
           lam = do reservedOp "\\" <|> reserved "lambda"
                    pats <- many1 (try pat)
@@ -121,16 +110,14 @@ pat = buildExpressionParser table term <?> "pattern"
                       pats <- many pat
                       return $ PApp () con pats
                               
-          varpat = do v <- varname
-                      return $ PVar () v
+          varpat = PVar () <$> varname
 
           wildcard = do reservedOp "_"
                         return $ Wildcard ()
                              
-          intpat = do i <- integer
-                      return $ IntPat () $ fromInteger i
+          intpat = IntPat () <$> fromInteger <$> integer
 
-          boolpat = liftM (BoolPat ()) boollit
+          boolpat = BoolPat () <$> boollit
 
           listcons head rest = PApp () "cons" [head, rest]
                                
@@ -138,7 +125,7 @@ pat = buildExpressionParser table term <?> "pattern"
                     return $ foldr listcons (PApp () "nil" []) pats
                     
 
-defEq varname = do try $ symbol varname
+defEq varname = do _ <- try $ symbol varname
                    pats <- many pat
                    reservedOp "="
                    body <- expr
@@ -182,11 +169,8 @@ typedecl = datadecl <|> typealias <?> "Type declaration"
 program = do (decls, defs) <- liftM partitionEithers $ many $ whiteSpace >> (decl <|> vardef)
              return $ Program decls defs
                   
-    where decl = do td <- typedecl
-                    return $ Left td
-                           
-          vardef = do d <- def
-                      return $ Right d
+    where decl = Left <$> typedecl                           
+          vardef = Right <$> def
 
 parseFile = IP.parseFromFile parseWhole
     where parseWhole = do prog <- program

@@ -1,0 +1,42 @@
+Name:                metafun
+Version:             0.1.2
+Synopsis:            Compile a Haskell-like language into C++ template metaprograms
+Description:         Compiler for a simple, Haskell-like language that outputs C++ template metaprograms
+Homepage:            http://gergo.erdi.hu/projects/metafun/
+License:             GPL-3
+License-file:        LICENSE
+Author:              Dr. ÉRDI Gergő
+Maintainer:          gergo@erdi.hu
+
+Category:            Language
+
+Build-type:          Simple
+-- Extra-source-files:  
+
+-- Constraint on the version of Cabal needed to build this package.
+Cabal-version:       >=1.6
+
+source-repository head
+  Type:     git
+  Location: git://github.com/gergoerdi/metafun.git
+
+
+Executable metafun
+  hs-source-dirs:    src
+  Main-is:           Metafun.hs
+  
+  -- Packages needed in order to build this package.
+  Build-depends:     base >= 3 && < 5,
+                     pretty,
+                     MissingH,
+                     mtl,
+                     containers,
+                     IndentParser,
+                     parsec
+
+  ghc-options:       -Wall -fwarn-tabs -fno-warn-name-shadowing -fno-warn-missing-signatures -fno-warn-incomplete-patterns -fno-warn-unused-binds
+
+  -- Modules not exported by this package.
+  -- Other-modules:       
+  
+  

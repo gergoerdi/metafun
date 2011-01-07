@@ -2,3 +2,6 @@
 *.o
 
 metafun
+dist
+
+Setup.hs
