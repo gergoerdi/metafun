@@ -8,6 +8,7 @@ module Metafun.Compiler.State
 
 import Control.Monad.RWS
 import Control.Monad
+import Control.Applicative
 import qualified Language.CxxMPL.Syntax as MPL
 import qualified Language.Kiff.Syntax as Kiff
 import qualified Data.Map as Map
@@ -17,8 +18,8 @@ type LiftMap = Map.Map Kiff.VarName MPL.Name
 newtype Serial = Serial Integer deriving Show
 data Scope = Scope { liftedMap :: Map.Map Kiff.VarName MPL.Name,
                      scope :: [MPL.MetaVarDecl] }
-                   
-newtype Compiler a = Compiler { unCompiler :: RWS Scope [MPL.Def] Serial a} deriving Monad
+
+newtype Compiler a = Compiler { unCompiler :: RWS Scope [MPL.Def] Serial a} deriving (Functor, Applicative, Monad)
 
 runCompiler :: Compiler () -> MPL.Program
 runCompiler (Compiler rws) = let (_, state, output) = (runRWS rws) (Scope Map.empty []) (Serial 0)
