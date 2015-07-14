@@ -9,7 +9,6 @@ import qualified Language.CxxMPL.Syntax as MPL
 import Metafun.Compiler.State
 import Control.Monad
 import Control.Applicative
-import Data.List
 import Data.Maybe
 
 type TProgram = Kiff.Program Kiff.Ty
@@ -38,9 +37,30 @@ compile (Kiff.Program typeDecls defs) = do
 compileDef :: TDef -> Compiler ()
 compileDef def@(Kiff.Def _ name _ eqs) = do
     name' <- fromMaybe (convertName name) <$> lookupLiftedName name
+    let implName = "__impl_" ++ name'
     mtys <- compileDefDecl def
-    specs <- mapM compileDefEq eqs
-    output $ MPL.Def name' mtys specs
+    case eqs of
+        [eq] -> do
+            (_, spec) <- compileDefEq Nothing eq
+            output $ MPL.Def name' mtys [spec]
+        _ -> do
+            fwdVars <- forM mtys $ \mty -> do
+                v <- newVar
+                return (v, mty)
+            let fwdVarDecls = map (uncurry MPL.MetaVarDecl) fwdVars
+                fwdVarRefs = map (MPL.VarRef . fst) fwdVars
+                callAlt i = MPL.Typename $ MPL.Call implName (MPL.IntLit i : fwdVarRefs)
+                fwdFirst = MPL.Specialization fwdVarDecls Nothing [] (MPL.TyClass, callAlt 0)
+
+            let mkFallthrough altNum (fallthrough, spec) =
+                    if fallthrough then [spec, next] else [spec]
+                  where
+                    next = MPL.Specialization fwdVarDecls (Just $ MPL.IntLit altNum : fwdVarRefs) []
+                           (MPL.TyClass, callAlt (altNum + 1))
+            output $ MPL.Def name' mtys [fwdFirst]
+            specs <- zipWithM (compileDefEq . Just) [0..] eqs
+            let specs' = concat $ zipWith mkFallthrough [0..] specs
+            output $ MPL.Def implName (MPL.MetaInt:mtys) specs'
 
 compileDefDecl :: TDef -> Compiler [MPL.MetaTy]
 compileDefDecl (Kiff.Def t _ _ _) = do
@@ -51,17 +71,20 @@ compileDefDecl (Kiff.Def t _ _ _) = do
     tys = init $ uncurryTy t
     mtys = map toMetaTy tys
 
-compileDefEq :: TDefEq -> Compiler MPL.Specialization
-compileDefEq (Kiff.DefEq _ty pats expr) = do
+compileDefEq :: Maybe Int -> TDefEq -> Compiler (Bool, MPL.Specialization)
+compileDefEq altNum (Kiff.DefEq _ty pats expr) = do
     (varss, spec) <- unzip <$> mapM varsAndSpec pats
     scopeVars <- getScopeVars
     let vars = concat varss
         vars' = scopeVars ++ vars
+        fallthrough = not $ all isVar spec
         spec' = map (\ (MPL.MetaVarDecl name _) -> MPL.VarRef name) scopeVars ++ spec
+        spec'' = case altNum of
+            Just i -> Just $ MPL.IntLit i : spec'
+            Nothing -> if fallthrough then Just spec' else Nothing
     body <- withScopeVars vars $ compileExpr expr
     let body' = if null spec' then body else addTypename body
-    return $ MPL.Specialization vars' (if (all isVar spec) then Nothing else Just spec') [] (MPL.TyClass, body')
-
+    return (fallthrough, MPL.Specialization vars' spec'' [] (MPL.TyClass, body'))
   where
     varsAndSpec :: TPat -> Compiler ([MPL.MetaVarDecl], MPL.Expr)
     varsAndSpec (Kiff.PVar ty var) =
