@@ -125,7 +125,7 @@ pat = buildExpressionParser table term <?> "pattern"
                     return $ foldr listcons (PApp () "nil" []) pats
                     
 
-defEq varname = do _ <- try $ symbol varname
+defEq varname = do _ <- try $ reserved varname
                    pats <- many pat
                    reservedOp "="
                    body <- expr
