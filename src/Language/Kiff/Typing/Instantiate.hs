@@ -2,11 +2,9 @@
 module Language.Kiff.Typing.Instantiate (instantiate) where
 
 import Language.Kiff.Syntax
-import Language.Kiff.Typing
 import Language.Kiff.Typing.State
-    
+
 import qualified Data.Map as Map
-import Data.Maybe
 import Control.Monad.State
 
 type TvMap = Map.Map Tv Tv

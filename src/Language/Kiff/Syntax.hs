@@ -75,79 +75,76 @@ instance Functor Program where
     fmap f (Program decls defs) = Program decls (map (fmap f) defs)
 
 instance Functor Def where
-    fmap f (Def xi name decl eqs) = Def (f xi) name decl (map (fmap f) eqs)               
+    fmap f (Def tag name decl eqs) = Def (f tag) name decl (map (fmap f) eqs)
 
 instance Functor DefEq where
-    fmap f (DefEq xi pats body) = DefEq (f xi) (map (fmap f) pats) (fmap f body)
-                
+    fmap f (DefEq tag pats body) = DefEq (f tag) (map (fmap f) pats) (fmap f body)
+
 instance Functor Expr where
-    fmap f (Var xi var)                  = Var (f xi) var
-    fmap f (Con xi con)                  = Con (f xi) con
-    fmap f (App xi fun x)                = App (f xi) (fmap f fun) (fmap f x)
-    fmap f (Lam xi pats body)            = Lam (f xi) (map (fmap f) pats) (fmap f body)
-    fmap f (Let xi defs body)            = Let (f xi) (map (fmap f) defs) (fmap f body)
-    fmap f (PrimBinOp xi op left right)  = PrimBinOp (f xi) op (fmap f left) (fmap f right)
-    fmap f (IfThenElse xi cond thn els)  = IfThenElse (f xi) (fmap f cond) (fmap f thn) (fmap f els)
-    fmap f (IntLit xi n)                 = IntLit (f xi) n
-    fmap f (BoolLit xi b)                = BoolLit (f xi) b
-    fmap f (UnaryMinus xi expr)          = UnaryMinus (f xi) (fmap f expr)
-    fmap f (Not xi expr)                 = Not (f xi) (fmap f expr)    
+    fmap f (Var tag var)                  = Var (f tag) var
+    fmap f (Con tag con)                  = Con (f tag) con
+    fmap f (App tag fun x)                = App (f tag) (fmap f fun) (fmap f x)
+    fmap f (Lam tag pats body)            = Lam (f tag) (map (fmap f) pats) (fmap f body)
+    fmap f (Let tag defs body)            = Let (f tag) (map (fmap f) defs) (fmap f body)
+    fmap f (PrimBinOp tag op left right)  = PrimBinOp (f tag) op (fmap f left) (fmap f right)
+    fmap f (IfThenElse tag cond thn els)  = IfThenElse (f tag) (fmap f cond) (fmap f thn) (fmap f els)
+    fmap f (IntLit tag n)                 = IntLit (f tag) n
+    fmap f (BoolLit tag b)                = BoolLit (f tag) b
+    fmap f (UnaryMinus tag expr)          = UnaryMinus (f tag) (fmap f expr)
+    fmap f (Not tag expr)                 = Not (f tag) (fmap f expr)
 
 instance Functor Pat where
-    fmap f (PVar xi var)       = PVar (f xi) var
-    fmap f (PApp xi con pats)  = PApp (f xi) con (map (fmap f) pats)
-    fmap f (Wildcard xi)       = Wildcard (f xi)
-    fmap f (IntPat xi n)       = IntPat (f xi) n
-    fmap f (BoolPat xi b)      = BoolPat (f xi) b
-                        
+    fmap f (PVar tag var)       = PVar (f tag) var
+    fmap f (PApp tag con pats)  = PApp (f tag) con (map (fmap f) pats)
+    fmap f (Wildcard tag)       = Wildcard (f tag)
+    fmap f (IntPat tag n)       = IntPat (f tag) n
+    fmap f (BoolPat tag b)      = BoolPat (f tag) b
+
 
 
 class Functor d => Tagged d where
     getTag :: d a -> a
 
 instance Tagged Def where
-    getTag (Def xi _ _ _) = xi
+    getTag (Def tag _ _ _) = tag
 
 instance Tagged DefEq where
-    getTag (DefEq xi _ _) = xi
+    getTag (DefEq tag _ _) = tag
 
 instance Tagged Expr where
-    getTag (Var xi _)             = xi
-    getTag (Con xi _)             = xi
-    getTag (App xi _ _)           = xi
-    getTag (Lam xi _ _)           = xi
-    getTag (Let xi _ _)           = xi
-    getTag (PrimBinOp xi _ _ _)   = xi
-    getTag (IfThenElse xi _ _ _)  = xi
-    getTag (IntLit xi _)          = xi
-    getTag (BoolLit xi _)         = xi
-    getTag (UnaryMinus xi _)      = xi
-    getTag (Not xi expr)          = xi
+    getTag (Var tag _)             = tag
+    getTag (Con tag _)             = tag
+    getTag (App tag _ _)           = tag
+    getTag (Lam tag _ _)           = tag
+    getTag (Let tag _ _)           = tag
+    getTag (PrimBinOp tag _ _ _)   = tag
+    getTag (IfThenElse tag _ _ _)  = tag
+    getTag (IntLit tag _)          = tag
+    getTag (BoolLit tag _)         = tag
+    getTag (UnaryMinus tag _)      = tag
+    getTag (Not tag _)             = tag
 
 instance Tagged Pat where
-    getTag (PVar xi _)    = xi
-    getTag (PApp xi _ _)  = xi
-    getTag (Wildcard xi)  = xi
-    getTag (IntPat xi _)  = xi
-    getTag (BoolPat xi _) = xi
-                                   
-    
+    getTag (PVar tag _)    = tag
+    getTag (PApp tag _ _)  = tag
+    getTag (Wildcard tag)  = tag
+    getTag (IntPat tag _)  = tag
+    getTag (BoolPat tag _) = tag
+
+
 instance Show Tv where
     show (TvName v) = v
     show (TvId x) = "t" ++ (show x)
-                    
+
 instance Show Ty where
     show ty = show' False ty
-        where show' p (TyVar v) = show v
+        where show' _p (TyVar v) = show v
               show' p (TyFun t t') = parenIf p $ unwords [show' True t, "->", show' False t']
-              show' p (TyList t) = "[" ++ (show' False t) ++ "]"
-              show' p (TyApp t t') = unwords [show' True t, show' False t']
-              show' p (TyData d) = d
-              show' p (TyPrimitive TyInt) = "Int"
-              show' p (TyPrimitive TyBool) = "Bool"
+              show' _p (TyList t) = "[" ++ (show' False t) ++ "]"
+              show' _p (TyApp t t') = unwords [show' True t, show' False t']
+              show' _p (TyData d) = d
+              show' _p (TyPrimitive TyInt) = "Int"
+              show' _p (TyPrimitive TyBool) = "Bool"
 
               parenIf False s = s
               parenIf True  s = "(" ++ s ++ ")"
-                  
-
-                                  

@@ -13,8 +13,6 @@ import Control.Monad
 import Data.Char
 import Data.Either
 
-import Control.Applicative ((<$>)) -- IndentParser uses Parsec 2, which doesn't expose an Applicative instance...
-
 lexer = T.makeTokenParser $ L.haskellStyle {
           T.reservedNames = ["if", "then", "else", "True", "False", "let", "in", "data", "type", "lambda"],
           T.reservedOpNames = ["::", "->", "=", "\\", "_", "|",

@@ -9,8 +9,6 @@ import Language.Kiff.Typing.Instantiate
 import Language.Kiff.Typing.State
 import Language.Kiff.CallGraph
 
-import qualified Data.Map as Map
-import Data.Either
 import Control.Monad
 import Control.Monad.Error
     
