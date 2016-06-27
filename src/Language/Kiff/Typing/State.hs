@@ -25,7 +25,8 @@ data Ctx = Ctx { conmap :: Map.Map DataName Ty,
                  varmap :: Map.Map VarName VarBind }
            deriving Show
 
-newtype Typing a = Typing {erws :: ErrorT TypingError (RWS Ctx [TyEq] TvId) a} deriving (Monad, MonadError TypingError)
+newtype Typing a = Typing {erws :: ErrorT TypingError (RWS Ctx [TyEq] TvId) a}
+                 deriving (Functor, Applicative, Monad, MonadError TypingError)
 
 lookupVar :: VarName -> Typing (Maybe VarBind)
 lookupVar v = Typing $ asks (Map.lookup v . varmap)

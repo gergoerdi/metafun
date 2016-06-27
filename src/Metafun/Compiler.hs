@@ -1,14 +1,10 @@
 module Metafun.Compiler (compile) where
 
 import qualified Language.Kiff.Syntax as Kiff
-import Language.Kiff.Typing
-import qualified Language.Kiff.Typing.Substitution as Subst
-
 import qualified Language.CxxMPL.Syntax as MPL
 
 import Metafun.Compiler.State
 import Control.Monad
-import Control.Applicative
 import Data.Maybe
 
 type TProgram = Kiff.Program Kiff.Ty

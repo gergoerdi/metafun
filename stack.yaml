@@ -1,0 +1,4 @@
+resolver: lts-6.5
+
+extra-deps:
+- IndentParser-0.2.1

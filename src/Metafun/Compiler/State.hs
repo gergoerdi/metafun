@@ -7,8 +7,6 @@ module Metafun.Compiler.State
      output) where
 
 import Control.Monad.RWS
-import Control.Monad
-import Control.Applicative
 import qualified Language.CxxMPL.Syntax as MPL
 import qualified Language.Kiff.Syntax as Kiff
 import qualified Data.Map as Map

@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Language.Kiff.Typing.Instantiate (instantiate) where
 
 import Language.Kiff.Syntax
