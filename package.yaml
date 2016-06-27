@@ -1,0 +1,25 @@
+name: metafun
+synopsis: Compile a Haskell-like language into C++ template metaprograms
+description: Compiler for a simple, Haskell-like language that outputs C++ template metaprograms
+version: 0.1.3
+category: Language
+license: GPL-3
+author:
+  - Gergő Érdi
+maintainer: gergo@erdi.hu
+github: gergoerdi/metafun
+
+dependencies:
+  - base
+  - mtl
+  - pretty
+  - MissingH
+  - containers
+  - parsec
+  - IndentParser
+
+source-dirs: src
+
+executables:
+  metafun:
+    main: Metafun.hs
